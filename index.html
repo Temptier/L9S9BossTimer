@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>18 Synchronized Timers</title>
+<title>18 Synchronized Timers + Scheduled Bosses</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0f0f0f">
 
@@ -21,7 +21,8 @@ header button { background:var(--fg); color:var(--bg); border:none; padding:10px
 header button:hover { opacity:0.8; }
 .timer { display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:1.2rem; background:var(--card-bg); border:2px solid var(--fg); border-radius:10px; padding:15px; text-align:center; transition: background 0.5s,border 0.5s,color 0.5s;}
 .label { font-size:1rem; margin-bottom:10px; color:var(--accent);}
-.clock { font-size:1.5rem; font-weight:bold; margin-bottom:10px;}
+.clock { font-size:1.5rem; font-weight:bold; margin-bottom:5px;}
+.endtime { font-size:0.9rem; color:var(--accent);}
 .timer button { background:var(--fg); color:var(--bg); border:none; padding:5px 10px; border-radius:5px; cursor:pointer; font-family:monospace; font-weight:bold; font-size:0.9rem; transition:background 0.3s,color 0.3s;}
 .timer button:hover { opacity:0.8; }
 .expired { animation: flashRed 1s infinite alternate; border-color:var(--expired-color)!important; color:var(--expired-color)!important;}
@@ -40,25 +41,45 @@ header button:hover { opacity:0.8; }
   <button id="toggleTheme">Toggle Dark/Light</button>
 </header>
 
-<!-- 18 Timers -->
-<div class="timer" data-hours="10"><div class="label">Venatus</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="10"><div class="label">Viorent</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="21"><div class="label">Ego</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="24"><div class="label">Levera</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="24"><div class="label">Araneo</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="24"><div class="label">Undomiel</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="18"><div class="label">Lady Dalia</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="29"><div class="label">General Aquleus</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="29"><div class="label">Amentis</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="32"><div class="label">Baron Braudmore</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="48"><div class="label">Wannitas</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="48"><div class="label">Metus</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="48"><div class="label">Duplican</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="35"><div class="label">Shuliar</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="32"><div class="label">Gareth</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="37"><div class="label">Titore</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="35"><div class="label">Larba</div><div class="clock"></div><button>Restart</button></div>
-<div class="timer" data-hours="35"><div class="label">Catena</div><div class="clock"></div><button>Restart</button></div>
+<!-- 18 Countdown Timers -->
+<div class="timer" data-hours="10"><div class="label">Venatus</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="10"><div class="label">Viorent</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="21"><div class="label">Ego</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="24"><div class="label">Levera</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="24"><div class="label">Araneo</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="24"><div class="label">Undomiel</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="18"><div class="label">Lady Dalia</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="29"><div class="label">General Aquleus</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="29"><div class="label">Amentis</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="32"><div class="label">Baron Braudmore</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="48"><div class="label">Wannitas</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="48"><div class="label">Metus</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="48"><div class="label">Duplican</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="35"><div class="label">Shuliar</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="32"><div class="label">Gareth</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="37"><div class="label">Titore</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="35"><div class="label">Larba</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+<div class="timer" data-hours="35"><div class="label">Catena</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
+
+<!-- Scheduled Boss Timers -->
+<div class="timer fixed" data-schedule="mon 11:30"><div class="label">Climantis</div><div class="clock"></div><div class="endtime"></div></div>
+<div class="timer fixed" data-schedule="thu 19:00"><div class="label">Climantis</div><div class="clock"></div><div class="endtime"></div></div>
+
+<div class="timer fixed" data-schedule="sun 17:00"><div class="label">Saphirus</div><div class="clock"></div><div class="endtime"></div></div>
+<div class="timer fixed" data-schedule="tue 11:30"><div class="label">Saphirus</div><div class="clock"></div><div class="endtime"></div></div>
+
+<div class="timer fixed" data-schedule="tue 19:00"><div class="label">Neutro</div><div class="clock"></div><div class="endtime"></div></div>
+<div class="timer fixed" data-schedule="thu 11:30"><div class="label">Neutro</div><div class="clock"></div><div class="endtime"></div></div>
+
+<div class="timer fixed" data-schedule="mon 19:00"><div class="label">Thymele</div><div class="clock"></div><div class="endtime"></div></div>
+<div class="timer fixed" data-schedule="wed 11:30"><div class="label">Thymele</div><div class="clock"></div><div class="endtime"></div></div>
+
+<div class="timer fixed" data-schedule="sat 15:00"><div class="label">Milavy</div><div class="clock"></div><div class="endtime"></div></div>
+<div class="timer fixed" data-schedule="sat 17:00"><div class="label">Ringor</div><div class="clock"></div><div class="endtime"></div></div>
+<div class="timer fixed" data-schedule="fri 19:00"><div class="label">Roderick</div><div class="clock"></div><div class="endtime"></div></div>
+
+<div class="timer fixed" data-schedule="sun 09:00"><div class="label">Auraq</div><div class="clock"></div><div class="endtime"></div></div>
+<div class="timer fixed" data-schedule="wed 09:00"><div class="label">Auraq</div><div class="clock"></div><div class="endtime"></div></div>
 
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -103,10 +124,10 @@ function startCountdown(timer,hours){
   const id=timer.dataset.id;
   const elapsed=Math.floor((Date.now()-startTimes[id])/1000);
   const total=hours*3600; let remaining=total-elapsed;
+  const endAt=new Date(startTimes[id]+total*1000);
 
   if(remaining<=0){
     remaining=0;
-    timer.querySelector('.clock').textContent="00:00:00";
     timer.classList.add("expired");
     timer.classList.remove("warning");
     if(!expired[id]){beep(); expired[id]=true;}
@@ -130,16 +151,64 @@ function startCountdown(timer,hours){
         s=String(secs).padStart(2,'0');
   timer.querySelector('.clock').textContent=
     days>0?`${days}d ${h}:${m}:${s}`:`${h}:${m}:${s}`;
+  timer.querySelector('.endtime').textContent=
+    startTimes[id] ? `Ends: ${endAt.toLocaleDateString(undefined,{weekday:'long'})} ${endAt.toLocaleTimeString()}` : "";
 }
 
 function updateClocks(){
-  document.querySelectorAll('.timer').forEach(timer=>{
+  document.querySelectorAll('.timer:not(.fixed)').forEach(timer=>{
     const id=timer.dataset.id;
     const hours=parseInt(timer.dataset.hours,10);
     if(startTimes[id]){
       startCountdown(timer,hours);
     }else{
       timer.querySelector('.clock').textContent="--:--:--";
+      timer.querySelector('.endtime').textContent="";
+      timer.classList.remove("expired","warning");
+    }
+  });
+}
+
+// Fixed schedule timers
+function getNextOccurrence(dayStr,timeStr){
+  const daysMap = {sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
+  const [h,m] = timeStr.split(":").map(Number);
+  const targetDay = daysMap[dayStr.toLowerCase()];
+  const now = new Date();
+  let next = new Date();
+  next.setHours(h,m,0,0);
+  while(next.getDay() !== targetDay || next <= now){
+    next.setDate(next.getDate()+1);
+    next.setHours(h,m,0,0);
+  }
+  return next;
+}
+
+function updateFixedTimers(){
+  document.querySelectorAll('.timer.fixed').forEach(timer=>{
+    const [day,time] = timer.dataset.schedule.split(" ");
+    const nextTime = getNextOccurrence(day,time);
+    const remaining = Math.floor((nextTime-Date.now())/1000);
+
+    const days=Math.floor(remaining/86400),
+          hrs=Math.floor((remaining%86400)/3600),
+          mins=Math.floor((remaining%3600)/60),
+          secs=remaining%60;
+    const h=String(hrs).padStart(2,'0'),
+          m=String(mins).padStart(2,'0'),
+          s=String(secs).padStart(2,'0');
+    timer.querySelector('.clock').textContent =
+      days>0?`${days}d ${h}:${m}:${s}`:`${h}:${m}:${s}`;
+    timer.querySelector('.endtime').textContent =
+      `Next: ${nextTime.toLocaleDateString(undefined,{weekday:'long'})} ${nextTime.toLocaleTimeString()}`;
+
+    if(remaining<=0){
+      timer.classList.add("expired");
+      timer.classList.remove("warning");
+    }else if(remaining<=300){
+      timer.classList.add("warning");
+      timer.classList.remove("expired");
+    }else{
       timer.classList.remove("expired","warning");
     }
   });
@@ -152,17 +221,15 @@ db.ref('timers').on('value', snapshot=>{
 });
 
 // Initialize timers
-const timerElements=document.querySelectorAll('.timer');
+const timerElements=document.querySelectorAll('.timer:not(.fixed)');
 timerElements.forEach((timer,i)=>{
   const id=`timer-${i}`;
   timer.dataset.id=id;
 
-  // Do not auto-start, just ensure key exists
   db.ref('timers/'+id).get().then(snap=>{
     if(!snap.exists()){ db.ref('timers/'+id).set(null); }
   });
 
-  // Restart button (manual start)
   timer.querySelector('button').addEventListener('click',()=>{
     db.ref('timers/'+id).set(Date.now());
   });
@@ -182,7 +249,10 @@ document.getElementById('stopAll').addEventListener('click',()=>{
   });
 });
 
-setInterval(updateClocks,1000);
+setInterval(()=>{
+  updateClocks();
+  updateFixedTimers();
+},1000);
 
 // PWA Service Worker registration
 if ("serviceWorker" in navigator) {
