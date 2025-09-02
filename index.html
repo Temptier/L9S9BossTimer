@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0f0f0f">
 
-<!-- PWA Manifest -->
 <link rel="manifest" href="manifest.json">
 
 <style>
@@ -30,8 +29,8 @@ header button:hover { opacity:0.8; }
 .warning { animation: flashYellow 1s infinite alternate; border-color:var(--warning-color)!important; color:var(--warning-color)!important;}
 @keyframes flashYellow { from{background:var(--card-bg);} to{background:#440;}}
 @media(max-width:1200px){body{grid-template-columns:repeat(3,1fr);}}
-@media(max-width:768px){body{grid-template-columns:repeat(2,1fr);} .timer button{padding:10px 15px; font-size:1rem;} header button{padding:12px 25px; font-size:1.1rem;}}
-@media(max-width:480px){body{grid-template-columns:1fr;} .timer button{padding:12px 20px; font-size:1.2rem;} header button{padding:14px 28px; font-size:1.2rem;}}
+@media(max-width:768px){body{grid-template-columns:repeat(2,1fr);}} 
+@media(max-width:480px){body{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -41,7 +40,7 @@ header button:hover { opacity:0.8; }
   <button id="toggleTheme">Toggle Dark/Light</button>
 </header>
 
-<!-- 18 Countdown Timers -->
+<!-- Countdown Timers -->
 <div class="timer" data-hours="10"><div class="label">Venatus</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
 <div class="timer" data-hours="10"><div class="label">Viorent</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
 <div class="timer" data-hours="21"><div class="label">Ego</div><div class="clock"></div><div class="endtime"></div><button>Restart</button></div>
@@ -78,8 +77,8 @@ header button:hover { opacity:0.8; }
 <div class="timer fixed" data-schedule="sat 17:00"><div class="label">Ringor</div><div class="clock"></div><div class="endtime"></div></div>
 <div class="timer fixed" data-schedule="fri 19:00"><div class="label">Roderick</div><div class="clock"></div><div class="endtime"></div></div>
 
-<div class="timer fixed" data-schedule="sun 09:00"><div class="label">Auraq</div><div class="clock"></div><div class="endtime"></div></div>
-<div class="timer fixed" data-schedule="wed 09:00"><div class="label">Auraq</div><div class="clock"></div><div class="endtime"></div></div>
+<div class="timer fixed" data-schedule="sun 21:00"><div class="label">Auraq</div><div class="clock"></div><div class="endtime"></div></div>
+<div class="timer fixed" data-schedule="wed 21:00"><div class="label">Auraq</div><div class="clock"></div><div class="endtime"></div></div>
 
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -169,7 +168,6 @@ function updateClocks(){
   });
 }
 
-// Fixed schedule timers
 function getNextOccurrence(dayStr,timeStr){
   const daysMap = {sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
   const [h,m] = timeStr.split(":").map(Number);
