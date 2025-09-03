@@ -44,15 +44,15 @@ section h2 { text-align:center; margin-bottom:15px; color:var(--accent); }
 </header>
 
 <section class="manual-timers">
-  <h2>Manual Timers</h2>
+  <h2>Boss Timer</h2>
   <div class="add-timer">
     <input type="text" id="newTimerLabel" placeholder="Timer Label">
     <input type="number" id="newTimerHours" placeholder="Hours" min="1" style="width:80px;">
     <button id="addTimer">Add Timer</button>
   </div>
   <div class="timer-grid" id="manualTimersGrid">
-
-<div class="timer" data-hours="10"><div class="label">Venatus</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <!-- your boss timers stay here -->
+    <div class="timer" data-hours="10"><div class="label">Venatus</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
     <div class="timer" data-hours="10"><div class="label">Viorent</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
     <div class="timer" data-hours="21"><div class="label">Ego</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
     <div class="timer" data-hours="24"><div class="label">Levera</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
@@ -72,7 +72,6 @@ section h2 { text-align:center; margin-bottom:15px; color:var(--accent); }
     <div class="timer" data-hours="35"><div class="label">Catena</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
   </div>
 </section>
-
 <section class="fixed-timers">
   <h2>Scheduled Boss Timers</h2>
   <div class="add-timer">
@@ -80,16 +79,7 @@ section h2 { text-align:center; margin-bottom:15px; color:var(--accent); }
     <input type="text" id="newFixedSchedule" placeholder="Schedule (mon 11:30,thu 19:00)">
     <button id="addFixedTimer">Add Scheduled Timer</button>
   </div>
-  <div class="timer-grid" id="fixedTimersGrid">
-    <div class="timer fixed" data-schedule="mon 11:30,thu 19:00"><div class="label">Climantis</div><div class="clock"></div><div class="endtime"></div></div>
-    <div class="timer fixed" data-schedule="sun 17:00,tue 11:30"><div class="label">Saphirus</div><div class="clock"></div><div class="endtime"></div></div>
-    <div class="timer fixed" data-schedule="tue 19:00,thu 11:30"><div class="label">Neutro</div><div class="clock"></div><div class="endtime"></div></div>
-    <div class="timer fixed" data-schedule="mon 19:00,wed 11:30"><div class="label">Thymele</div><div class="clock"></div><div class="endtime"></div></div>
-    <div class="timer fixed" data-schedule="sat 15:00"><div class="label">Milavy</div><div class="clock"></div><div class="endtime"></div></div>
-    <div class="timer fixed" data-schedule="sat 17:00"><div class="label">Ringor</div><div class="clock"></div><div class="endtime"></div></div>
-    <div class="timer fixed" data-schedule="fri 19:00"><div class="label">Roderick</div><div class="clock"></div><div class="endtime"></div></div>
-    <div class="timer fixed" data-schedule="sun 21:00,wed 21:00"><div class="label">Auraq</div><div class="clock"></div><div class="endtime"></div></div>
-  </div>
+  <div class="timer-grid" id="fixedTimersGrid"></div>
 </section>
 
 <div id="confirmModal">
@@ -118,6 +108,26 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// -------------------- Default Scheduled Bosses --------------------
+const defaultFixedBosses = [
+  { label: "Climantis", schedule: "mon 11:30,thu 19:00" },
+  { label: "Saphirus", schedule: "sun 17:00,tue 11:30" },
+  { label: "Neutro", schedule: "tue 19:00,thu 11:30" },
+  { label: "Thymele", schedule: "mon 19:00,wed 11:30" },
+  { label: "Milavy", schedule: "sat 15:00" },
+  { label: "Ringor", schedule: "sat 17:00" },
+  { label: "Roderick", schedule: "fri 19:00" },
+  { label: "Auraq", schedule: "sun 21:00,wed 21:00" }
+];
+
+// Seed defaults if Firebase is empty
+db.ref('fixedTimers').once('value').then(snap => {
+  if (!snap.exists()) {
+    defaultFixedBosses.forEach(boss => {
+      db.ref('fixedTimers').push(boss);
+    });
+  }
+});
 // -------------------- Theme Toggle --------------------
 function applyTheme(theme) {
     document.body.classList.toggle("light", theme === "light");
@@ -245,10 +255,25 @@ timerElements.forEach((timer,i) => {
     });
 });
 
-// -------------------- Firebase Listener --------------------
+// -------------------- Firebase Listeners --------------------
 db.ref('timers').on('value', snapshot => {
     startTimes = snapshot.val() || {};
     updateClocks();
+});
+
+// Render scheduled bosses from Firebase
+db.ref('fixedTimers').on('value', snapshot => {
+    const grid = document.getElementById('fixedTimersGrid');
+    grid.innerHTML = "";
+    snapshot.forEach(child => {
+        const boss = child.val();
+        const div = document.createElement('div');
+        div.className = 'timer fixed';
+        div.dataset.schedule = boss.schedule;
+        div.innerHTML = `<div class="label">${boss.label}</div><div class="clock"></div><div class="endtime"></div>`;
+        grid.appendChild(div);
+    });
+    updateFixedTimers();
 });
 
 // -------------------- Restart / Stop All --------------------
@@ -298,19 +323,13 @@ document.getElementById('addFixedTimer').addEventListener('click', () => {
     const label = document.getElementById('newFixedLabel').value.trim();
     const schedule = document.getElementById('newFixedSchedule').value.trim();
     if (!label || !schedule) return;
-    const grid = document.getElementById('fixedTimersGrid');
-    const div = document.createElement('div');
-    div.className='timer fixed';
-    div.dataset.schedule = schedule;
-    div.innerHTML = `<div class="label">${label}</div><div class="clock"></div><div class="endtime"></div>`;
-    grid.appendChild(div);
+    db.ref('fixedTimers').push({ label, schedule });
 });
 
 // -------------------- Update Loop --------------------
 setInterval(() => { updateClocks(); updateFixedTimers(); }, 1000);
 updateClocks();
 updateFixedTimers();
-
 </script>
 </body>
 </html>
