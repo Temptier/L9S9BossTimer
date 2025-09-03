@@ -4,13 +4,12 @@
 <meta charset="UTF-8">
 <title>Synchronized Timers + Scheduled Bosses</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0f0f0f">
 <style>
-:root { --bg: #111; --fg: #0f0; --accent: #0ff; --card-bg: #222; --expired-color: red; --warning-color: yellow; }
+:root { --bg:#111; --fg:#0f0; --accent:#0ff; --card-bg:#222; --expired-color:red; --warning-color:yellow; }
 body.light { --bg:#f8f8f8; --fg:#111; --accent:#007777; --card-bg:#fff; --expired-color:red; --warning-color:orange; }
 body { background: var(--bg); color: var(--fg); font-family: monospace; margin:0; padding:20px; transition: background 0.3s,color 0.3s;}
-header { text-align:center; margin-bottom:20px;}
-header button { background:var(--fg); color:var(--bg); border:none; padding:10px 20px; border-radius:8px; cursor:pointer; font-family:monospace; font-weight:bold; font-size:1rem; margin:5px; transition: background 0.3s,color 0.3s;}
+header { text-align:center; margin-bottom:20px; }
+header button { background:var(--fg); color:var(--bg); border:none; padding:10px 20px; border-radius:8px; cursor:pointer; font-family:monospace; font-weight:bold; font-size:1rem; margin:5px; transition: background 0.3s,color 0.3s; }
 header button:hover { opacity:0.8; }
 section { margin-bottom:40px; }
 section h2 { text-align:center; margin-bottom:15px; color:var(--accent); }
@@ -28,6 +27,12 @@ section h2 { text-align:center; margin-bottom:15px; color:var(--accent); }
 @keyframes flashRed { from{background:var(--card-bg);} to{background:#400;} }
 .warning { animation: flashYellow 1s infinite alternate; border-color:var(--warning-color)!important; color:var(--warning-color)!important; }
 @keyframes flashYellow { from{background:var(--card-bg);} to{background:#440;} }
+
+/* Confirmation modal */
+#confirmModal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; z-index:9999; }
+#confirmBox { background:var(--card-bg); color:var(--fg); padding:20px; border-radius:10px; text-align:center; width:300px; box-shadow:0 0 10px #000; }
+#confirmBox button { margin:5px; padding:8px 16px; border:none; border-radius:5px; background:var(--fg); color:var(--bg); font-weight:bold; cursor:pointer; }
+#confirmBox label { display:block; margin-bottom:10px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -45,14 +50,34 @@ section h2 { text-align:center; margin-bottom:15px; color:var(--accent); }
     <input type="number" id="newTimerHours" placeholder="Hours" min="1" style="width:80px;">
     <button id="addTimer">Add Timer</button>
   </div>
-  <div class="timer-grid" id="manualTimersGrid"></div>
+  <div class="timer-grid" id="manualTimersGrid">
+    <!-- Original Manual Timers -->
+    <div class="timer" data-hours="10"><div class="label">Venatus</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="10"><div class="label">Viorent</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="21"><div class="label">Ego</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="24"><div class="label">Levera</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="24"><div class="label">Araneo</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="24"><div class="label">Undomiel</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="18"><div class="label">Lady Dalia</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="29"><div class="label">General Aquleus</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="29"><div class="label">Amentis</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="32"><div class="label">Baron Braudmore</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="48"><div class="label">Wannitas</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="48"><div class="label">Metus</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="48"><div class="label">Duplican</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="35"><div class="label">Shuliar</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="32"><div class="label">Gareth</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="37"><div class="label">Titore</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="35"><div class="label">Larba</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+    <div class="timer" data-hours="35"><div class="label">Catena</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button></div>
+  </div>
 </section>
 
 <section class="fixed-timers">
   <h2>Scheduled Boss Timers</h2>
   <div class="add-timer">
     <input type="text" id="newFixedLabel" placeholder="Boss Name">
-    <input type="text" id="newFixedSchedule" placeholder="Schedule (e.g., mon 11:30,thu 19:00)">
+    <input type="text" id="newFixedSchedule" placeholder="Schedule (mon 11:30,thu 19:00)">
     <button id="addFixedTimer">Add Scheduled Timer</button>
   </div>
   <div class="timer-grid" id="fixedTimersGrid">
@@ -67,27 +92,26 @@ section h2 { text-align:center; margin-bottom:15px; color:var(--accent); }
   </div>
 </section>
 
-<div id="confirmModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; z-index:9999;">
-  <div id="confirmBox" style="background:var(--card-bg); color:var(--fg); padding:20px; border-radius:10px; text-align:center; width:300px; box-shadow:0 0 10px #000;">
+<!-- Confirmation Modal -->
+<div id="confirmModal">
+  <div id="confirmBox">
     <p id="confirmText">Are you sure you want to restart all timers?</p>
-    <label style="display:block; margin-bottom:10px; cursor:pointer;">
-      <input type="checkbox" id="dontShowAgain" style="margin-right:5px;"> Do not show again
-    </label>
-    <button id="confirmYes" style="margin:5px; padding:8px 16px; border:none; border-radius:5px; background:var(--fg); color:var(--bg); font-weight:bold; cursor:pointer;">Yes</button>
-    <button id="confirmNo" style="margin:5px; padding:8px 16px; border:none; border-radius:5px; background:var(--fg); color:var(--bg); font-weight:bold; cursor:pointer;">No</button>
+    <label><input type="checkbox" id="dontShowAgain"> Do not show again</label>
+    <button id="confirmYes">Yes</button>
+    <button id="confirmNo">No</button>
   </div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
-// Firebase Config
+// Firebase initialization
 const firebaseConfig = {
   apiKey:"AIzaSyAD5I3c-SZ2LRuYG_6kaMgEkjvOtP1d3pU",
   authDomain:"synchronizedtimer-57ef0.firebaseapp.com",
   databaseURL:"https://synchronizedtimer-57ef0-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId:"synchronizedtimer-57ef0",
-  storageBucket:"synchronizedtimer-57ef0.firebasestorage.app",
+  storageBucket:"synchronizedtimer-57ef0.appspot.com",
   messagingSenderId:"812068089886",
   appId:"1:812068089886:web:61e95179ca3ec2251e7e0f"
 };
@@ -95,201 +119,147 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 // Theme
-function applyTheme(theme){ document.body.classList.toggle("light", theme==="light"); localStorage.setItem("theme", theme); }
-document.getElementById("toggleTheme").addEventListener("click", ()=>{ applyTheme(document.body.classList.contains("light")?"dark":"light"); });
+function applyTheme(theme){
+  document.body.classList.toggle("light",theme==="light");
+  localStorage.setItem("theme",theme);
+  updateModalTheme();
+}
+document.getElementById("toggleTheme").addEventListener("click",()=>{ applyTheme(document.body.classList.contains("light")?"dark":"light");});
 applyTheme(localStorage.getItem("theme")||"dark");
+function updateModalTheme(){
+  const modalBox = document.getElementById('confirmBox');
+  modalBox.style.background = getComputedStyle(document.body).getPropertyValue('--card-bg');
+  modalBox.style.color = getComputedStyle(document.body).getPropertyValue('--fg');
+}
 
 // Timer logic
 let startTimes={}, warned={}, expired={};
 function beep(){ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.connect(gain); gain.connect(ctx.destination); osc.type="sine"; osc.frequency.value=880; osc.start(); gain.gain.setValueAtTime(0.1,ctx.currentTime); osc.stop(ctx.currentTime+0.5); }
 
-function updateTimerDisplay(timer, hours){
-  const id=timer.dataset.id;
-  if(!startTimes[id]) return timer.querySelector('.clock').textContent="--:--:--";
-  const elapsed=Math.floor((Date.now()-startTimes[id])/1000);
-  const total=hours*3600;
-  let remaining=total-elapsed;
-  const endAt=new Date(startTimes[id]+total*1000);
-  if(remaining<=0){ remaining=0; timer.classList.add("expired"); timer.classList.remove("warning"); if(!expired[id]){beep(); expired[id]=true;} }
-  else if(remaining<=300){ timer.classList.add("warning"); timer.classList.remove("expired"); if(!warned[id]){beep(); warned[id]=true;} }
-  else { timer.classList.remove("expired","warning"); warned[id]=false; expired[id]=false; }
-
-  const d=Math.floor(remaining/86400), h=Math.floor((remaining%86400)/3600), m=Math.floor((remaining%3600)/60), s=remaining%60;
-  timer.querySelector('.clock').textContent=d>0?`${d}d ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
-  :`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  timer.querySelector('.endtime').textContent=`Ends: ${endAt.toLocaleString()}`;
+function startCountdown(timer,hours){
+  const id = timer.dataset.id;
+  const elapsed = startTimes[id]? Math.floor((Date.now()-startTimes[id])/1000) : 0;
+  const total = hours*3600;
+  let remaining = total - elapsed;
+  const endAt = startTimes[id]? new Date(startTimes[id]+total*1000) : null;
+  if(remaining<=0){remaining=0; timer.classList.add("expired"); timer.classList.remove("warning"); if(!expired[id]){beep(); expired[id]=true;}}
+  else if(remaining<=300){timer.classList.add("warning"); timer.classList.remove("expired"); if(!warned[id]){beep(); warned[id]=true;}}
+  else {timer.classList.remove("expired","warning"); warned[id]=false; expired[id]=false;}
+  const days=Math.floor(remaining/86400), hrs=Math.floor((remaining%86400)/3600), mins=Math.floor((remaining%3600)/60), secs=remaining%60;
+  timer.querySelector('.clock').textContent = days>0? `${days}d ${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}` : `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+  timer.querySelector('.endtime').textContent = endAt? `Ends: ${endAt.toLocaleDateString(undefined,{weekday:'long'})} ${endAt.toLocaleTimeString()}` : "";
 }
 
-// Manual Timers
-const manualGrid = document.getElementById("manualTimersGrid");
-const initialManualTimers = [
-  { label: "Venatus", hours: 10 }, { label: "Viorent", hours: 10 }, { label: "Ego", hours: 21 },
-  { label: "Levera", hours: 24 }, { label: "Araneo", hours: 24 }, { label: "Undomiel", hours: 24 },
-  { label: "Lady Dalia", hours: 18 }, { label: "General Aquleus", hours: 29 }, { label: "Amentis", hours: 29 },
-  { label: "Baron Braudmore", hours: 32 }, { label: "Wannitas", hours: 48 }, { label: "Metus", hours: 48 },
-  { label: "Duplican", hours: 48 }, { label: "Shuliar", hours: 35 }, { label: "Gareth", hours: 32 },
-  { label: "Titore", hours: 37 }, { label: "Larba", hours: 35 }, { label: "Catena", hours: 35 }
-];
-function createManualTimer(id,label,hours){
-  const newTimer=document.createElement('div'); 
-  newTimer.className='timer'; 
-  newTimer.dataset.id=id; 
-  newTimer.dataset.hours=hours;
-  newTimer.innerHTML=`
-    <div class="label">${label}</div>
-    <div class="clock"></div>
-    <div class="endtime"></div>
-    <div>
-      <button class="restart">Restart</button>
-      <button class="delete" style="background:red;color:#fff;">Delete</button>
-    </div>`;
-  manualGrid.appendChild(newTimer);
-  newTimer.querySelector('.restart').addEventListener('click', ()=>{
-    const now=Date.now(); 
-    db.ref('timers/'+id).set(now); 
-    startTimes[id]=now; 
-    newTimer.classList.remove('expired','warning');
-  });
-  newTimer.querySelector('.delete').addEventListener('click', ()=>{
-    if(confirm(`Delete timer "${label}"?`)){
-      db.ref('timers/'+id).remove(); 
-      delete startTimes[id]; 
-      newTimer.remove();
-    }
+function updateClocks(){
+  document.querySelectorAll('.timer:not(.fixed)').forEach(timer=>{
+    const id = timer.dataset.id;
+    const hours = parseInt(timer.dataset.hours,10);
+    if(startTimes[id]){ startCountdown(timer,hours);}
+    else { timer.querySelector('.clock').textContent="--:--:--"; timer.querySelector('.endtime').textContent=""; timer.classList.remove("expired","warning"); }
   });
 }
-db.ref('timers').get().then(snapshot=>{
-  const existing = snapshot.val() || {};
-  initialManualTimers.forEach((t,i)=>{
-    const id=`timer-${i}`;
-    if(existing[id]) startTimes[id]=existing[id];
-    else db.ref('timers/'+id).set(Date.now());
-    createManualTimer(id,t.label,t.hours);
-  });
-});
-document.getElementById("addTimer").addEventListener("click", ()=>{
-  const label=document.getElementById("newTimerLabel").value.trim();
-  const hours=parseInt(document.getElementById("newTimerHours").value,10);
-  if(!label || !hours) return alert("Please enter label and hours");
-  const id=`timer-${Date.now()}`;
-  startTimes[id]=Date.now();
-  db.ref('timers/'+id).set(startTimes[id]);
-  createManualTimer(id,label,hours);
-  document.getElementById("newTimerLabel").value=""; 
-  document.getElementById("newTimerHours").value="";
-});
 
-// Scheduled timers functions (same as continuation above)
+// Scheduled timers
 function getNextOccurrence(dayStr,timeStr){
   const daysMap={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
-  const [h,m]=timeStr.split(":").map(Number); 
+  const [h,m]=timeStr.split(":").map(Number);
   const targetDay=daysMap[dayStr.toLowerCase()];
-  const now=new Date(); 
-  let next=new Date(); 
+  const now=new Date();
+  let next=new Date();
   next.setHours(h,m,0,0);
-  while(next.getDay()!==targetDay || next<=now) next.setDate(next.getDate()+1);
+  while(next.getDay()!==targetDay || next<=now){ next.setDate(next.getDate()+1); next.setHours(h,m,0,0);}
   return next;
 }
+
 function updateFixedTimers(){
   document.querySelectorAll('.timer.fixed').forEach(timer=>{
-    const schedules=timer.dataset.schedule.split(",");
-    let nextTime=null;
-    schedules.forEach(s=>{
-      const [day,time]=s.trim().split(" "); 
-      const occ=getNextOccurrence(day,time); 
-      if(!nextTime || occ<nextTime) nextTime=occ; 
+    const schedules = timer.dataset.schedule.split(",");
+    let nextTime = null;
+    schedules.forEach(schedule=>{
+      const [day,time]=schedule.trim().split(" ");
+      const occurrence=getNextOccurrence(day,time);
+      if(!nextTime || occurrence<nextTime) nextTime=occurrence;
     });
-    const remaining=Math.floor((nextTime-Date.now())/1000);
-    const d=Math.floor(remaining/86400), h=Math.floor((remaining%86400)/3600), m=Math.floor((remaining%3600)/60), s=remaining%60;
-    timer.querySelector('.clock').textContent=d>0?`${d}d ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
-    :`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-    timer.querySelector('.endtime').textContent=`Next: ${nextTime.toLocaleString()}`;
+    if(!nextTime) return;
+    const remaining = Math.floor((nextTime-Date.now())/1000);
+    const days=Math.floor(remaining/86400), hrs=Math.floor((remaining%86400)/3600), mins=Math.floor((remaining%3600)/60), secs=remaining%60;
+    timer.querySelector('.clock').textContent = days>0? `${days}d ${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}` : `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+    timer.querySelector('.endtime').textContent = `Next: ${nextTime.toLocaleDateString(undefined,{weekday:'long'})} ${nextTime.toLocaleTimeString()}`;
     if(remaining<=0){timer.classList.add("expired"); timer.classList.remove("warning");}
     else if(remaining<=300){timer.classList.add("warning"); timer.classList.remove("expired");}
-    else timer.classList.remove("expired","warning");
+    else{timer.classList.remove("expired","warning");}
   });
 }
-document.getElementById("addFixedTimer").addEventListener("click", ()=>{
-  const label = document.getElementById("newFixedLabel").value.trim();
-  const schedule = document.getElementById("newFixedSchedule").value.trim();
-  if(!label || !schedule) return alert("Enter boss name and schedule");
-  const newTimer = document.createElement('div');
-  newTimer.className = "timer fixed";
-  newTimer.dataset.schedule = schedule;
-  newTimer.innerHTML = `
-    <div class="label">${label}</div>
-    <div class="clock"></div>
-    <div class="endtime"></div>
-    <div>
-      <button class="delete" style="background:red;color:#fff;">Delete</button>
-    </div>`;
-  document.getElementById("fixedTimersGrid").appendChild(newTimer);
-  newTimer.querySelector('.delete').addEventListener('click', ()=>{ 
-    if(confirm(`Delete scheduled timer "${label}"?`)) newTimer.remove(); 
-  });
-  document.getElementById("newFixedLabel").value="";
-  document.getElementById("newFixedSchedule").value="";
-});
 
-// Restart All / Stop All
-const confirmModal=document.getElementById("confirmModal"), confirmYes=document.getElementById("confirmYes"), confirmNo=document.getElementById("confirmNo"), dontShowAgain=document.getElementById("dontShowAgain");
-let skipConfirmation=localStorage.getItem("skipRestartConfirmation")==="true"; dontShowAgain.checked=skipConfirmation;
-document.getElementById('restartAll').addEventListener('click', ()=>{
-  if(skipConfirmation){
-    document.querySelectorAll('.timer:not(.fixed)').forEach(timer=>{
-      const now=Date.now(); 
-      db.ref('timers/'+timer.dataset.id).set(now); 
-      startTimes[timer.dataset.id]=now; 
-      timer.classList.remove('expired','warning'); 
-    });
-  } else { 
-    confirmModal.style.display="flex"; 
-  }
-});
-
-confirmYes.addEventListener('click', ()=>{
-  document.querySelectorAll('.timer:not(.fixed)').forEach(timer=>{
-    const now = Date.now();
-    db.ref('timers/' + timer.dataset.id).set(now);
-    startTimes[timer.dataset.id] = now;
-    timer.classList.remove('expired','warning');
-  });
-  if(dontShowAgain.checked){
-    localStorage.setItem("skipRestartConfirmation","true");
-    skipConfirmation = true;
-  }
-  confirmModal.style.display = "none";
-});
-
-confirmNo.addEventListener('click', ()=>{
-  confirmModal.style.display = "none";
-});
-
-// Stop all timers
-document.getElementById('stopAll').addEventListener('click', ()=>{
-  document.querySelectorAll('.timer:not(.fixed)').forEach(timer=>{
-    db.ref('timers/' + timer.dataset.id).set(null);
-    delete startTimes[timer.dataset.id];
-    timer.querySelector('.clock').textContent = "--:--:--";
-    timer.querySelector('.endtime').textContent = "";
-    timer.classList.remove('expired','warning');
+// Initialize manual timers
+const timerElements = document.querySelectorAll('.timer:not(.fixed)');
+timerElements.forEach((timer,i)=>{
+  const id=`timer-${i}`;
+  timer.dataset.id=id;
+  timer.querySelector('button').addEventListener('click',()=>{ 
+    db.ref('timers/'+id).set(Date.now()); 
   });
 });
 
-// Firebase listener to update timers in real-time
-db.ref('timers').on('value', snapshot=>{
-  startTimes = snapshot.val() || {};
+// Firebase listener
+db.ref('timers').on('value', snapshot=>{ startTimes = snapshot.val()||{}; updateClocks(); });
+
+// Restart / Stop All
+const confirmModal = document.getElementById("confirmModal");
+const confirmYes = document.getElementById("confirmYes");
+const confirmNo = document.getElementById("confirmNo");
+const dontShowAgain = document.getElementById("dontShowAgain");
+let skipConfirmation = localStorage.getItem("skipRestartConfirmation")==="true"; dontShowAgain.checked=skipConfirmation;
+
+document.getElementById('restartAll').addEventListener('click',()=>{
+  if(skipConfirmation){ timerElements.forEach(t=>db.ref('timers/'+t.dataset.id).set(Date.now())); }
+  else { confirmModal.style.display="flex"; }
+});
+confirmYes.addEventListener('click',()=>{
+  timerElements.forEach(t=>db.ref('timers/'+t.dataset.id).set(Date.now()));
+  if(dontShowAgain.checked){ localStorage.setItem("skipRestartConfirmation","true"); skipConfirmation=true; }
+  confirmModal.style.display="none";
+});
+confirmNo.addEventListener('click',()=>{ confirmModal.style.display="none"; });
+
+document.getElementById('stopAll').addEventListener('click',()=>{
+  timerElements.forEach(t=>db.ref('timers/'+t.dataset.id).set(null));
 });
 
-// Update loop for all timers
-setInterval(()=>{
-  document.querySelectorAll('.timer:not(.fixed)').forEach(timer=>{
-    const hours = parseInt(timer.dataset.hours,10);
-    updateTimerDisplay(timer, hours);
-  });
-  updateFixedTimers();
-}, 1000);
+// Add new manual timer
+document.getElementById('addTimer').addEventListener('click',()=>{
+  const label = document.getElementById('newTimerLabel').value.trim();
+  const hours = parseInt(document.getElementById('newTimerHours').value);
+  if(!label || !hours) return;
+  const grid = document.getElementById('manualTimersGrid');
+  const div = document.createElement('div');
+  div.className='timer';
+  div.dataset.hours=hours;
+  const id=`timer-${Date.now()}`;
+  div.dataset.id=id;
+  div.innerHTML=`<div class="label">${label}</div><div class="clock">--:--:--</div><div class="endtime"></div><button>Restart</button>`;
+  grid.appendChild(div);
+  div.querySelector('button').addEventListener('click',()=>{ db.ref('timers/'+id).set(Date.now()); });
+  db.ref('timers/'+id).set(null);
+});
 
+// Add new scheduled timer
+document.getElementById('addFixedTimer').addEventListener('click',()=>{
+  const label = document.getElementById('newFixedLabel').value.trim();
+  const schedule = document.getElementById('newFixedSchedule').value.trim();
+  if(!label || !schedule) return;
+  const grid = document.getElementById('fixedTimersGrid');
+  const div = document.createElement('div');
+  div.className='timer fixed';
+  div.dataset.schedule = schedule;
+  div.innerHTML=`<div class="label">${label}</div><div class="clock"></div><div class="endtime"></div>`;
+  grid.appendChild(div);
+});
+
+// Update loop
+setInterval(()=>{ updateClocks(); updateFixedTimers(); },1000);
+updateClocks(); updateFixedTimers();
 </script>
+
 </body>
 </html>
