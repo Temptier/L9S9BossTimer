@@ -29,17 +29,13 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
 #visitorLog{background:var(--card-bg);padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);max-height:200px;overflow:auto}
 #confirmModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center}
 #confirmBox{background:var(--card-bg);padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);text-align:center}
-.locked{pointer-events:none;opacity:0.5}
-#userModal{position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:1000;}
-#userModal .modalBox{background:var(--card-bg);padding:20px;border-radius:10px;width:280px;text-align:center;color:var(--fg)}
+#userModal{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999}
+#userModalContent{background:var(--card-bg);padding:20px;border-radius:10px;text-align:center;width:300px}
 @media(max-width:600px){
   header{flex-direction:column;align-items:stretch}
   .header-left, .header-right {justify-content: space-between;margin-bottom: 8px}
-  section > div[style*="margin-bottom:12px"] {
-    flex-direction: column; gap: 6px;
-  }
-  section > div[style*="margin-bottom:12px"] input,
-  section > div[style*="margin-bottom:12px"] button {width: 100%; box-sizing: border-box;}
+  section > div[style*="margin-bottom:12px"] { flex-direction: column; gap: 6px; }
+  section > div[style*="margin-bottom:12px"] input, section > div[style*="margin-bottom:12px"] button {width: 100%; box-sizing: border-box;}
   .clock{font-size:1rem}
   .datetime,.endtime,.small{font-size:0.75rem}
 }
@@ -47,18 +43,18 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
 </head>
 <body>
 
-<!-- Modal for required user info -->
+<!-- User Info Modal -->
 <div id="userModal">
-  <div class="modalBox">
+  <div id="userModalContent">
     <h3>Enter Your Info</h3>
-    <input id="modalIGN" type="text" placeholder="IGN" style="width:100%;margin:8px 0;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.2)">
-    <input id="modalGuild" type="text" placeholder="Guild" style="width:100%;margin:8px 0;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.2)">
-    <button id="modalSubmit" style="margin-top:10px;padding:8px 12px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;">Submit</button>
+    <input id="modalIGN" type="text" placeholder="IGN" style="width:100%;margin-bottom:10px;padding:8px;border-radius:6px">
+    <input id="modalGuild" type="text" placeholder="Guild" style="width:100%;margin-bottom:10px;padding:8px;border-radius:6px">
+    <button id="modalSubmit" style="width:100%;padding:8px;border-radius:6px;background:var(--accent);color:#fff;font-weight:600">Submit</button>
   </div>
 </div>
 
-<div class="container locked">
-  <header class="locked">
+<div class="container" id="mainContent" style="display:none">
+  <header>
     <div class="header-left">
       <strong>Boss Timers</strong>
       <div style="display:flex;gap:8px;align-items:center">
@@ -73,7 +69,7 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
     </div>
   </header>
 
-  <main id="mainContent" style="display:none">
+  <main>
     <section>
       <h2>Manual Boss Timers</h2>
       <div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap">
@@ -111,11 +107,10 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
     </div>
   </div>
 </div>
-
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
-// -------------------- Firebase Init --------------------
+// ---------- Firebase Init ----------
 const firebaseConfig = {
   apiKey: "AIzaSyAD5I3c-SZ2LRuYG_6kaMgEkjvOtP1d3pU",
   authDomain: "synchronizedtimer-57ef0.firebaseapp.com",
@@ -128,51 +123,51 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// -------------------- User Info & Modal --------------------
-let userInfo = JSON.parse(localStorage.getItem("userInfo"));
+// ---------- User Info ----------
+let userInfo = JSON.parse(localStorage.getItem("userInfo")) || null;
+const mainContent = document.getElementById('mainContent');
 const userModal = document.getElementById('userModal');
 const modalIGN = document.getElementById('modalIGN');
 const modalGuild = document.getElementById('modalGuild');
 const modalSubmit = document.getElementById('modalSubmit');
-const changeBtn = document.getElementById('changeUser');
+const userInfoDisplay = document.getElementById('userInfo');
+const changeUserBtn = document.getElementById('changeUser');
 
-function showUserModal(){ userModal.style.display = 'flex'; }
-
-function setUserInfo(u,g){
-  userInfo={user:u.trim(),guild:g.trim()};
-  localStorage.setItem("userInfo",JSON.stringify(userInfo));
-  document.getElementById('userInfo').textContent=`IGN: ${userInfo.user} | Guild: ${userInfo.guild}`;
-  userModal.style.display='none';
-  document.querySelectorAll('.locked').forEach(el=>el.classList.remove('locked'));
-  document.getElementById('mainContent').style.display='block';
-  changeBtn.style.display='none'; // hide change button permanently
-  initApp(); // initialize app logic
+function showUserModal(){
+  userModal.style.display='flex';
+  mainContent.style.display='none';
 }
 
-// Modal submit event
-modalSubmit.addEventListener('click',()=>{
+function hideUserModal(){
+  userModal.style.display='none';
+  mainContent.style.display='block';
+  userInfoDisplay.textContent = `IGN: ${userInfo.user} | Guild: ${userInfo.guild}`;
+}
+
+// Load modal if no saved info
+if(!userInfo || !userInfo.user || !userInfo.guild){
+  showUserModal();
+} else {
+  hideUserModal();
+}
+
+// Submit button
+modalSubmit.addEventListener('click', ()=>{
   const ign = modalIGN.value.trim();
   const guild = modalGuild.value.trim();
-  if(!ign || !guild){
-    alert('Both IGN and Guild are required.');
-    return;
-  }
-  setUserInfo(ign,guild);
+  if(!ign || !guild){ alert('Both IGN and Guild are required'); return; }
+  userInfo = { user: ign, guild: guild };
+  localStorage.setItem('userInfo', JSON.stringify(userInfo));
+  hideUserModal();
 });
 
-// On page load, check if user info exists
-if(userInfo){
-  document.getElementById('userInfo').textContent=`IGN: ${userInfo.user} | Guild: ${userInfo.guild}`;
-  document.querySelectorAll('.locked').forEach(el=>el.classList.remove('locked'));
-  document.getElementById('mainContent').style.display='block';
-  changeBtn.style.display='none';
-  initApp();
-}else{
+// Change User
+changeUserBtn.addEventListener('click', ()=>{
   showUserModal();
-}
+  modalIGN.value = userInfo.user;
+  modalGuild.value = userInfo.guild;
+});
 
-// -------------------- App Logic --------------------
-function initApp(){
 // ---------- Preloaded Manual Timers ----------
 const preloadedManual = ["Venatus","Viorent","Ego","Levera","Araneo","Undomiel","Lady Dalia","General Aquleus","Amentis","Baron Braudmore","Wannitas","Metus","Duplican","Shuliar","Gareth","Titore","Larba","Catena"];
 function normalize(s){ return s.replace(/\s+/g,'_').toLowerCase(); }
@@ -244,7 +239,7 @@ function createBossCard(b){
   `;
   return card;
 }
-
+// ---------- Render Timers ----------
 function renderManualTimers(){
   const grid = document.getElementById('manualBossGrid');
   grid.innerHTML='';
@@ -276,7 +271,7 @@ function attachManualHandlers(){
   });
 }
 
-// ---------- Update Boss Clocks ----------
+// ---------- Update Clocks ----------
 function updateBossClocks(){
   ['manualBossGrid','scheduledBossGrid'].forEach(gridId=>{
     document.querySelectorAll(`#${gridId} .card`).forEach(card=>{
@@ -291,9 +286,8 @@ function updateBossClocks(){
       // Manual
       if(b.manual){
         const data=startTimes[b.manual.id];
-        if(data && data.startedAt){ 
-          remaining=b.manual.hours*3600 - Math.floor((Date.now()-data.startedAt)/1000); 
-        } else remaining=b.manual.hours*3600;
+        if(data && data.startedAt) remaining=b.manual.hours*3600 - Math.floor((Date.now()-data.startedAt)/1000);
+        else remaining=b.manual.hours*3600;
       }
 
       // Scheduled
@@ -327,11 +321,11 @@ function updateBossClocks(){
           if(endTimeEl) endTimeEl.textContent=`Ends: ${endDate.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${endDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
           lastByEl.textContent=`Last restart: ${startTimes[b.manual.id].user} [${startTimes[b.manual.id].guild}]`;
         }
-      } else { 
-        clockEl.textContent='--:--:--'; 
+      } else {
+        clockEl.textContent='--:--:--';
         if(endTimeEl) endTimeEl.textContent='';
-        lastByEl.textContent=''; 
-        card.classList.remove('expired','warning'); 
+        lastByEl.textContent='';
+        card.classList.remove('expired','warning');
       }
     });
   });
@@ -351,14 +345,12 @@ document.getElementById('addManual').addEventListener('click', ()=>{
   const name = document.getElementById('manualName').value.trim();
   const hours = parseInt(document.getElementById('manualHours').value);
   if(!name || isNaN(hours) || hours<=0){ alert('Enter valid name and hours'); return; }
-
   const id = 'manual_'+normalize(name);
   const timerObj = { label: name, hours, id };
   manualDefs.push(timerObj);
   db.ref('timers/'+id).set(null);
   mergeTimers();
   renderBossTimers();
-
   document.getElementById('manualName').value='';
   document.getElementById('manualHours').value='';
 });
@@ -368,14 +360,12 @@ document.getElementById('addScheduled').addEventListener('click', ()=>{
   const name = document.getElementById('schedName').value.trim();
   const schedule = document.getElementById('schedTime').value.trim();
   if(!name || !schedule){ alert('Enter name and schedule'); return; }
-
   const key = 'custom_'+normalize(name);
   const bossObj = { label: name, schedule };
   db.ref('fixedTimers/'+key).set(bossObj);
   fixedTimersCache[key] = bossObj;
   mergeTimers();
   renderBossTimers();
-
   document.getElementById('schedName').value='';
   document.getElementById('schedTime').value='';
 });
@@ -434,7 +424,6 @@ if(localStorage.getItem('theme')==='light') document.body.classList.add('light')
 
 // ---------- Auto Update ----------
 setInterval(updateBossClocks,1000);
-} // end of initApp
 </script>
 </body>
 </html>
