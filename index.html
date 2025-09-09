@@ -29,6 +29,7 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
 #visitorLog{background:var(--card-bg);padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);max-height:200px;overflow:auto}
 #confirmModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center}
 #confirmBox{background:var(--card-bg);padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);text-align:center}
+.locked{pointer-events:none;opacity:0.5}
 @media(max-width:600px){
   header{flex-direction:column;align-items:stretch}
   .header-left, .header-right {justify-content: space-between;margin-bottom: 8px}
@@ -43,8 +44,19 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
 </style>
 </head>
 <body>
-<div class="container">
-  <header>
+
+<!-- Modal for required user info -->
+<div id="userModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:1000;">
+  <div style="background:var(--card-bg);padding:20px;border-radius:10px;width:280px;text-align:center;color:var(--fg)">
+    <h3>Enter Your Info</h3>
+    <input id="modalIGN" type="text" placeholder="IGN" style="width:100%;margin:8px 0;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.2)">
+    <input id="modalGuild" type="text" placeholder="Guild" style="width:100%;margin:8px 0;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.2)">
+    <button id="modalSubmit" style="margin-top:10px;padding:8px 12px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;">Submit</button>
+  </div>
+</div>
+
+<div class="container locked">
+  <header class="locked">
     <div class="header-left">
       <strong>Boss Timers</strong>
       <div style="display:flex;gap:8px;align-items:center">
@@ -59,7 +71,7 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
     </div>
   </header>
 
-  <main>
+  <main id="mainContent" style="display:none">
     <section>
       <h2>Manual Boss Timers</h2>
       <div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap">
@@ -101,7 +113,7 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
-// ---------- Firebase Init ----------
+// -------------------- Firebase Init --------------------
 const firebaseConfig = {
   apiKey: "AIzaSyAD5I3c-SZ2LRuYG_6kaMgEkjvOtP1d3pU",
   authDomain: "synchronizedtimer-57ef0.firebaseapp.com",
@@ -114,281 +126,258 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ---------- User Info ----------
+// -------------------- User Info & Modal --------------------
 let userInfo = JSON.parse(localStorage.getItem("userInfo"));
-function askUserInfo(){
-  const u = prompt("Enter IGN:", userInfo ? userInfo.user : "") || "Guest";
-  const g = prompt("Enter guild:", userInfo ? userInfo.guild : "") || "NoGuild";
-  userInfo = { user: u.trim(), guild: g.trim() };
-  localStorage.setItem("userInfo", JSON.stringify(userInfo));
-  document.getElementById('userInfo').textContent = `IGN: ${userInfo.user} | Guild: ${userInfo.guild}`;
-}
-if(!userInfo){ askUserInfo(); } else { document.getElementById('userInfo').textContent = `IGN: ${userInfo.user} | Guild: ${userInfo.guild}`; }
-document.getElementById('changeUser').addEventListener('click', askUserInfo);
+const userModal = document.getElementById('userModal');
+const modalIGN = document.getElementById('modalIGN');
+const modalGuild = document.getElementById('modalGuild');
+const modalSubmit = document.getElementById('modalSubmit');
 
-// ---------- Preloaded Manual Timers ----------
-const preloadedManual = ["Venatus","Viorent","Ego","Levera","Araneo","Undomiel","Lady Dalia","General Aquleus","Amentis","Baron Braudmore","Wannitas","Metus","Duplican","Shuliar","Gareth","Titore","Larba","Catena"];
-function normalize(s){ return s.replace(/\s+/g,'_').toLowerCase(); }
-const manualDefs = preloadedManual.map(name=>({
-  label: name,
-  hours: { 'venatus':10,'viorent':10,'ego':21,'levera':24,'araneo':24,'undomiel':24,'lady_dalia':18,'general_aquleus':29,'amentis':29,'baron_braudmore':32,'wannitas':48,'metus':48,'duplican':35,'shuliar':35,'gareth':32,'titore':37,'larba':35,'catena':35 }[normalize(name)] || 24,
-  id: 'manual_'+normalize(name)
-}));
+function showUserModal(){ userModal.style.display = 'flex'; }
 
-// ---------- Preloaded Scheduled Timers ----------
-const defaultFixedBosses = [
-  { label: "Climantis", schedule: "mon 11:30,thu 19:00" },
-  { label: "Saphirus", schedule: "sun 17:00,tue 11:30" },
-  { label: "Neutro", schedule: "tue 19:00,thu 11:30" },
-  { label: "Thymele", schedule: "mon 19:00,wed 11:30" },
-  { label: "Milavy", schedule: "sat 15:00" },
-  { label: "Ringor", schedule: "sat 17:00" },
-  { label: "Roderick", schedule: "fri 19:00" },
-  { label: "Auraq", schedule: "sun 21:00,wed 21:00" }
-];
-defaultFixedBosses.forEach(b=> db.ref('fixedTimers/default_'+normalize(b.label)).set(b));
-
-// ---------- State ----------
-let startTimes = {};
-let fixedTimersCache = {};
-let bossMap = {};
-// ---------- Helper Functions ----------
-function parseSchedules(scheduleStr){ return scheduleStr.split(',').map(s=>s.trim()).filter(Boolean); }
-function getNextOccurrence(dayStr,timeStr){
-  const daysMap={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
-  const [h,m]=timeStr.split(':').map(Number);
-  const target=daysMap[dayStr.toLowerCase()];
-  const now=new Date();
-  let next=new Date();
-  next.setHours(h,m,0,0);
-  while(next.getDay()!==target || next<=now){ next.setDate(next.getDate()+1); next.setHours(h,m,0,0); }
-  return next;
+function setUserInfo(u,g){
+  userInfo={user:u.trim(),guild:g.trim()};
+  localStorage.setItem("userInfo",JSON.stringify(userInfo));
+  document.getElementById('userInfo').textContent=`IGN: ${userInfo.user} | Guild: ${userInfo.guild}`;
+  userModal.style.display='none';
+  // Unlock UI
+  document.querySelectorAll('.locked').forEach(el=>el.classList.remove('locked'));
+  // Show main content
+  document.getElementById('mainContent').style.display='block';
+  // Initialize app
+  initApp();
 }
 
-// ---------- Merge Timers ----------
-function mergeTimers(){
-  bossMap={};
-  manualDefs.forEach(m=>{
-    if(!bossMap[m.label]) bossMap[m.label]={label:m.label,manual:m,scheduled:null};
-    else bossMap[m.label].manual=m;
-  });
-  Object.values(fixedTimersCache).forEach(f=>{
-    if(!bossMap[f.label]) bossMap[f.label]={label:f.label,manual:null,scheduled:f};
-    else bossMap[f.label].scheduled=f;
-  });
-}
+modalSubmit.addEventListener('click',()=>{
+  const ign=modalIGN.value.trim();
+  const guild=modalGuild.value.trim();
+  if(!ign || !guild){ alert('Both IGN and Guild are required.'); return; }
+  setUserInfo(ign,guild);
+});
 
-// ---------- Render Boss Cards ----------
-function createBossCard(b){
-  const card=document.createElement('div');
-  card.className='card';
-  card.dataset.label=b.label;
-  const manualHours=b.manual ? b.manual.hours : null;
-  const schedules=b.scheduled ? parseSchedules(b.scheduled.schedule) : [];
-  const schedHtml=schedules.length ? `<div class="small">Schedule: ${schedules.join(', ')}</div>` : '';
-  card.innerHTML=`
-    <div class="label">${b.label}</div>
-    <div class="clock">--:--:--</div>
-    <div class="datetime"></div>
-    ${manualHours ? `<div class="small endtime"></div><button class="restartBtn">Restart (${manualHours}h)</button>` : ''}
-    ${schedHtml}
-    <div class="small lastBy"></div>
-  `;
-  return card;
-}
+document.getElementById('changeUser').addEventListener('click',showUserModal);
 
-function renderManualTimers(){
-  const grid = document.getElementById('manualBossGrid');
-  grid.innerHTML='';
-  Object.values(bossMap).forEach(b=>{ if(b.manual) grid.appendChild(createBossCard(b)); });
-  attachManualHandlers();
-}
+// On page load
+if(userInfo){
+  document.getElementById('userInfo').textContent=`IGN: ${userInfo.user} | Guild: ${userInfo.guild}`;
+  document.querySelectorAll('.locked').forEach(el=>el.classList.remove('locked'));
+  document.getElementById('mainContent').style.display='block';
+  initApp();
+}else showUserModal();
 
-function renderScheduledTimers(){
-  const grid = document.getElementById('scheduledBossGrid');
-  grid.innerHTML='';
-  Object.values(bossMap).forEach(b=>{ if(b.scheduled) grid.appendChild(createBossCard(b)); });
-}
+// -------------------- initApp --------------------
+function initApp(){
+  // ---------- Preloaded Manual Timers ----------
+  const preloadedManual = ["Venatus","Viorent","Ego","Levera","Araneo","Undomiel","Lady Dalia","General Aquleus","Amentis","Baron Braudmore","Wannitas","Metus","Duplican","Shuliar","Gareth","Titore","Larba","Catena"];
+  function normalize(s){ return s.replace(/\s+/g,'_').toLowerCase(); }
+  const manualDefs = preloadedManual.map(name=>({
+    label:name,
+    hours:{'venatus':10,'viorent':10,'ego':21,'levera':24,'araneo':24,'undomiel':24,'lady_dalia':18,'general_aquleus':29,'amentis':29,'baron_braudmore':32,'wannitas':48,'metus':48,'duplican':35,'shuliar':35,'gareth':32,'titore':37,'larba':35,'catena':35}[normalize(name)]||24,
+    id:'manual_'+normalize(name)
+  }));
 
-function renderBossTimers(){ renderManualTimers(); renderScheduledTimers(); }
+  // ---------- Preloaded Scheduled Timers ----------
+  const defaultFixedBosses = [
+    { label: "Climantis", schedule: "mon 11:30,thu 19:00" },
+    { label: "Saphirus", schedule: "sun 17:00,tue 11:30" },
+    { label: "Neutro", schedule: "tue 19:00,thu 11:30" },
+    { label: "Thymele", schedule: "mon 19:00,wed 11:30" },
+    { label: "Milavy", schedule: "sat 15:00" },
+    { label: "Ringor", schedule: "sat 17:00" },
+    { label: "Roderick", schedule: "fri 19:00" },
+    { label: "Auraq", schedule: "sun 21:00,wed 21:00" }
+  ];
+  defaultFixedBosses.forEach(b=> db.ref('fixedTimers/default_'+normalize(b.label)).set(b));
 
-// ---------- Manual Handlers ----------
-function attachManualHandlers(){
-  document.querySelectorAll('#manualBossGrid .restartBtn').forEach(btn=>{
-    if(btn.dataset.bound) return;
-    btn.addEventListener('click', ()=>{
-      const card=btn.parentElement;
-      const label=card.dataset.label;
-      const manualId=bossMap[label].manual.id;
-      const entry={ startedAt: Date.now(), user: userInfo.user, guild: userInfo.guild };
-      db.ref('timers/'+manualId).set(entry);
-      db.ref('timerLogs/'+manualId).push(entry);
-    });
-    btn.dataset.bound='1';
-  });
-}
+  // ---------- State ----------
+  let startTimes = {};
+  let fixedTimersCache = {};
+  let bossMap = {};
 
-// ---------- Update Boss Clocks (Manual + Scheduled) ----------
-function updateBossClocks(){
-  ['manualBossGrid','scheduledBossGrid'].forEach(gridId=>{
-    document.querySelectorAll(`#${gridId} .card`).forEach(card=>{
-      const label=card.dataset.label;
-      const b=bossMap[label];
-      const clockEl=card.querySelector('.clock');
-      const datetimeEl=card.querySelector('.datetime');
-      const lastByEl=card.querySelector('.lastBy');
-      const endTimeEl=card.querySelector('.endtime');
-      let remaining=null;
-      let infoText='';
+  // ---------- Functions ----------
+  function parseSchedules(scheduleStr){ return scheduleStr.split(',').map(s=>s.trim()).filter(Boolean); }
+  function getNextOccurrence(dayStr,timeStr){ const daysMap={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6}; const [h,m]=timeStr.split(':').map(Number); const target=daysMap[dayStr.toLowerCase()]; const now=new Date(); let next=new Date(); next.setHours(h,m,0,0); while(next.getDay()!==target || next<=now){ next.setDate(next.getDate()+1); next.setHours(h,m,0,0);} return next; }
+  function mergeTimers(){
+    bossMap={};
+    manualDefs.forEach(m=>{ if(!bossMap[m.label]) bossMap[m.label]={label:m.label,manual:m,scheduled:null}; else bossMap[m.label].manual=m; });
+    Object.values(fixedTimersCache).forEach(f=>{ if(!bossMap[f.label]) bossMap[f.label]={label:f.label,manual:null,scheduled:f}; else bossMap[f.label].scheduled=f; });
+  }
 
-      // Manual
-      if(b.manual){
-        const data=startTimes[b.manual.id];
-        if(data && data.startedAt){ 
-          remaining=b.manual.hours*3600 - Math.floor((Date.now()-data.startedAt)/1000); 
-          infoText=`Last restart: ${data.user} [${data.guild}]`; 
-        } else remaining=b.manual.hours*3600;
-      }
+  function createBossCard(b){
+    const card=document.createElement('div');
+    card.className='card';
+    card.dataset.label=b.label;
+    const manualHours=b.manual ? b.manual.hours : null;
+    const schedules=b.scheduled ? parseSchedules(b.scheduled.schedule) : [];
+    const schedHtml=schedules.length ? `<div class="small">Schedule: ${schedules.join(', ')}</div>` : '';
+    card.innerHTML=`<div class="label">${b.label}</div>
+      <div class="clock">--:--:--</div>
+      <div class="datetime"></div>
+      ${manualHours?`<div class="small endtime"></div><button class="restartBtn">Restart (${manualHours}h)</button>`:''}
+      ${schedHtml}
+      <div class="small lastBy"></div>`;
+    return card;
+  }
 
-      // Scheduled
-      if(b.scheduled){
-        let next=null;
-        parseSchedules(b.scheduled.schedule).forEach(s=>{
-          const [day,time]=s.split(' ');
-          const occ=getNextOccurrence(day,time);
-          if(!next || occ<next) next=occ;
-        });
-        if(next){
-          const schedRemaining=Math.floor((next-Date.now())/1000);
-          if(remaining===null || schedRemaining<remaining) remaining=schedRemaining;
+  function renderManualTimers(){ const grid=document.getElementById('manualBossGrid'); grid.innerHTML=''; Object.values(bossMap).forEach(b=>{ if(b.manual) grid.appendChild(createBossCard(b)); }); attachManualHandlers(); }
+  function renderScheduledTimers(){ const grid=document.getElementById('scheduledBossGrid'); grid.innerHTML=''; Object.values(bossMap).forEach(b=>{ if(b.scheduled) grid.appendChild(createBossCard(b)); }); }
+  function renderBossTimers(){ renderManualTimers(); renderScheduledTimers(); }
 
-          const d=new Date(next);
-          const dayStr=d.toLocaleDateString(undefined,{weekday:'short'});
-          const timeStr=d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
-          datetimeEl.textContent=`Next spawn: ${dayStr} ${timeStr}`;
+  function attachManualHandlers(){ document.querySelectorAll('#manualBossGrid .restartBtn').forEach(btn=>{ if(btn.dataset.bound) return; btn.addEventListener('click',()=>{ const card=btn.parentElement; const label=card.dataset.label; const manualId=bossMap[label].manual.id; const entry={startedAt:Date.now(),user:userInfo.user,guild:userInfo.guild}; db.ref('timers/'+manualId).set(entry); db.ref('timerLogs/'+manualId).push(entry); }); btn.dataset.bound='1'; }); }
+
+  function updateBossClocks(){
+    ['manualBossGrid','scheduledBossGrid'].forEach(gridId=>{
+      document.querySelectorAll(`#${gridId} .card`).forEach(card=>{
+        const label=card.dataset.label;
+        const b=bossMap[label];
+        const clockEl=card.querySelector('.clock');
+        const datetimeEl=card.querySelector('.datetime');
+        const lastByEl=card.querySelector('.lastBy');
+        const endTimeEl=card.querySelector('.endtime');
+        let remaining=null;
+
+        // Manual
+        if(b.manual){
+          const data=startTimes[b.manual.id];
+          if(data && data.startedAt){ remaining=b.manual.hours*3600-Math.floor((Date.now()-data.startedAt)/1000); }
+          else remaining=b.manual.hours*3600;
         }
-      }
 
-      if(remaining!==null){
-        if(remaining<=0){ remaining=0; card.classList.add('expired'); card.classList.remove('warning'); }
-        else if(remaining<=300){ card.classList.add('warning'); card.classList.remove('expired'); }
-        else card.classList.remove('expired','warning');
-
-        const h=Math.floor(remaining/3600), m=Math.floor((remaining%3600)/60), s=remaining%60;
-        clockEl.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-
-        if(b.manual && startTimes[b.manual.id]){
-          const endDate=new Date(startTimes[b.manual.id].startedAt + b.manual.hours*3600*1000);
-          endTimeEl.textContent=`Ends: ${endDate.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${endDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
-          lastByEl.textContent=`Last restart: ${startTimes[b.manual.id].user} [${startTimes[b.manual.id].guild}]`;
+        // Scheduled
+        if(b.scheduled){
+          let next=null;
+          parseSchedules(b.scheduled.schedule).forEach(s=>{
+            const [day,time]=s.split(' ');
+            const occ=getNextOccurrence(day,time);
+            if(!next || occ<next) next=occ;
+          });
+          if(next){
+            const schedRemaining=Math.floor((next-Date.now())/1000);
+            if(remaining===null || schedRemaining<remaining) remaining=schedRemaining;
+            const d=new Date(next);
+            const dayStr=d.toLocaleDateString(undefined,{weekday:'short'});
+            const timeStr=d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+            datetimeEl.textContent=`Next spawn: ${dayStr} ${timeStr}`;
+          }
         }
-      } else { 
-        clockEl.textContent='--:--:--'; 
-        if(endTimeEl) endTimeEl.textContent='';
-        lastByEl.textContent=''; 
-        card.classList.remove('expired','warning'); 
-      }
+
+        if(remaining!==null){
+          if(remaining<=0){ remaining=0; card.classList.add('expired'); card.classList.remove('warning'); }
+          else if(remaining<=300){ card.classList.add('warning'); card.classList.remove('expired'); }
+          else card.classList.remove('expired','warning');
+
+          const h=Math.floor(remaining/3600), m=Math.floor((remaining%3600)/60), s=remaining%60;
+          clockEl.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+          if(b.manual && startTimes[b.manual.id]){
+            const endDate=new Date(startTimes[b.manual.id].startedAt+b.manual.hours*3600*1000);
+            if(endTimeEl) endTimeEl.textContent=`Ends: ${endDate.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${endDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+            lastByEl.textContent=`Last restart: ${startTimes[b.manual.id].user} [${startTimes[b.manual.id].guild}]`;
+          }
+        } else { 
+          clockEl.textContent='--:--:--'; 
+          if(endTimeEl) endTimeEl.textContent=''; 
+          lastByEl.textContent=''; 
+          card.classList.remove('expired','warning'); 
+        }
+      });
     });
+  }
+
+  // ---------- Firebase Listeners ----------
+  db.ref('timers').on('value', snap=>{ startTimes=snap.val()||{}; updateBossClocks(); });
+  db.ref('fixedTimers').on('value', snap=>{
+    fixedTimersCache={};
+    snap.forEach(c=>{ fixedTimersCache[c.key]=c.val(); });
+    mergeTimers();
+    renderBossTimers();
   });
-}
 
-// ---------- Firebase Listeners ----------
-db.ref('timers').on('value', snap=>{ startTimes=snap.val()||{}; updateBossClocks(); });
-db.ref('fixedTimers').on('value', snap=>{
-  fixedTimersCache={};
-  snap.forEach(c=>{ fixedTimersCache[c.key]=c.val(); });
-  mergeTimers();
-  renderBossTimers();
-});
+  // ---------- Add Manual Timer ----------
+  document.getElementById('addManual').addEventListener('click', ()=>{
+    const name=document.getElementById('manualName').value.trim();
+    const hours=parseInt(document.getElementById('manualHours').value);
+    if(!name||isNaN(hours)||hours<=0){ alert('Enter valid name and hours'); return; }
+    const id='manual_'+normalize(name);
+    const timerObj={label:name,hours,id};
+    manualDefs.push(timerObj);
+    db.ref('timers/'+id).set(null);
+    mergeTimers();
+    renderBossTimers();
+    document.getElementById('manualName').value='';
+    document.getElementById('manualHours').value='';
+  });
 
-// ---------- Add Manual Timer ----------
-document.getElementById('addManual').addEventListener('click', ()=>{
-  const name = document.getElementById('manualName').value.trim();
-  const hours = parseInt(document.getElementById('manualHours').value);
-  if(!name || isNaN(hours) || hours<=0){ alert('Enter valid name and hours'); return; }
+  // ---------- Add Scheduled Boss ----------
+  document.getElementById('addScheduled').addEventListener('click', ()=>{
+    const name=document.getElementById('schedName').value.trim();
+    const schedule=document.getElementById('schedTime').value.trim();
+    if(!name||!schedule){ alert('Enter name and schedule'); return; }
+    const key='custom_'+normalize(name);
+    const bossObj={label:name,schedule};
+    db.ref('fixedTimers/'+key).set(bossObj);
+    fixedTimersCache[key]=bossObj;
+    mergeTimers();
+    renderBossTimers();
+    document.getElementById('schedName').value='';
+    document.getElementById('schedTime').value='';
+  });
 
-  const id = 'manual_'+normalize(name);
-  const timerObj = { label: name, hours, id };
-  manualDefs.push(timerObj);
-  db.ref('timers/'+id).set(null);
-  mergeTimers();
-  renderBossTimers();
+  // ---------- Restart/Stop All ----------
+  const confirmModal=document.getElementById('confirmModal');
+  const confirmYes=document.getElementById('confirmYes');
+  const confirmNo=document.getElementById('confirmNo');
+  const dontShow=document.getElementById('dontShowAgain');
+  let skipConfirm=localStorage.getItem('skipRestartConfirmation')==='true';
+  if(dontShow) dontShow.checked=skipConfirm;
 
-  document.getElementById('manualName').value='';
-  document.getElementById('manualHours').value='';
-});
+  document.getElementById('restartAll').addEventListener('click', ()=>{
+    const manualCards=document.querySelectorAll('#manualBossGrid .restartBtn');
+    if(skipConfirm){ manualCards.forEach(btn=>btn.click()); } 
+    else confirmModal.style.display='flex';
+  });
 
-// ---------- Add Scheduled Boss ----------
-document.getElementById('addScheduled').addEventListener('click', ()=>{
-  const name = document.getElementById('schedName').value.trim();
-  const schedule = document.getElementById('schedTime').value.trim();
-  if(!name || !schedule){ alert('Enter name and schedule'); return; }
+  if(confirmYes) confirmYes.addEventListener('click', ()=>{
+    document.querySelectorAll('#manualBossGrid .restartBtn').forEach(btn=>btn.click());
+    if(dontShow && dontShow.checked){ localStorage.setItem('skipRestartConfirmation','true'); skipConfirm=true; }
+    confirmModal.style.display='none';
+  });
+  if(confirmNo) confirmNo.addEventListener('click', ()=>confirmModal.style.display='none');
 
-  const key = 'custom_'+normalize(name);
-  const bossObj = { label: name, schedule };
-  db.ref('fixedTimers/'+key).set(bossObj);
-  fixedTimersCache[key] = bossObj;
-  mergeTimers();
-  renderBossTimers();
+  document.getElementById('stopAll').addEventListener('click', ()=>{ manualDefs.forEach(m=>db.ref('timers/'+m.id).set(null)); });
 
-  document.getElementById('schedName').value='';
-  document.getElementById('schedTime').value='';
-});
-
-// ---------- Restart/Stop All ----------
-const confirmModal=document.getElementById('confirmModal');
-const confirmYes=document.getElementById('confirmYes');
-const confirmNo=document.getElementById('confirmNo');
-const dontShow=document.getElementById('dontShowAgain');
-let skipConfirm=localStorage.getItem('skipRestartConfirmation')==='true';
-if(dontShow) dontShow.checked=skipConfirm;
-
-document.getElementById('restartAll').addEventListener('click', ()=>{
-  const manualCards=document.querySelectorAll('#manualBossGrid .restartBtn');
-  if(skipConfirm){ manualCards.forEach(btn=>btn.click()); } 
-  else confirmModal.style.display='flex';
-});
-
-if(confirmYes) confirmYes.addEventListener('click', ()=>{
-  document.querySelectorAll('#manualBossGrid .restartBtn').forEach(btn=>btn.click());
-  if(dontShow && dontShow.checked){ localStorage.setItem('skipRestartConfirmation','true'); skipConfirm=true; }
-  confirmModal.style.display='none';
-});
-if(confirmNo) confirmNo.addEventListener('click', ()=>confirmModal.style.display='none');
-
-document.getElementById('stopAll').addEventListener('click', ()=>{ manualDefs.forEach(m=>db.ref('timers/'+m.id).set(null)); });
-
-// ---------- Visitor Panel ----------
-const visitorLogDiv=document.getElementById('visitorLog');
-let seen={};
-function loadVisitors(){
-  const cutoff=Date.now()-10*60*1000;
-  db.ref('siteVisits').orderByChild('accessedAt').startAt(cutoff).once('value', snap=>{
-    const visits=[];
-    snap.forEach(c=>visits.push(c.val()));
-    visits.sort((a,b)=>b.accessedAt-a.accessedAt);
-    visitorLogDiv.innerHTML = visits.length ? '' : 'No recent visitors.';
-    visits.forEach(v=>{
-      const key=`${v.user}|${v.guild}|${v.accessedAt}`;
-      const isNew=!seen[key]; seen[key]=true;
-      const minutes=Math.floor((Date.now()-v.accessedAt)/60000);
-      const d=document.createElement('div');
-      d.textContent=`${v.user} [${v.guild}] - ${minutes} min ago ${isNew?'🆕':''}`;
-      visitorLogDiv.appendChild(d);
+  // ---------- Visitor Panel ----------
+  const visitorLogDiv=document.getElementById('visitorLog');
+  let seen={};
+  function loadVisitors(){
+    const cutoff=Date.now()-10*60*1000;
+    db.ref('siteVisits').orderByChild('accessedAt').startAt(cutoff).once('value', snap=>{
+      const visits=[];
+      snap.forEach(c=>visits.push(c.val()));
+      visits.sort((a,b)=>b.accessedAt-a.accessedAt);
+      visitorLogDiv.innerHTML = visits.length ? '' : 'No recent visitors.';
+      visits.forEach(v=>{
+        const key=`${v.user}|${v.guild}|${v.accessedAt}`;
+        const isNew=!seen[key]; seen[key]=true;
+        const minutes=Math.floor((Date.now()-v.accessedAt)/60000);
+        const d=document.createElement('div');
+        d.textContent=`${v.user} [${v.guild}] - ${minutes} min ago ${isNew?'🆕':''}`;
+        visitorLogDiv.appendChild(d);
+      });
     });
+  }
+  loadVisitors(); setInterval(loadVisitors,30000);
+
+  // ---------- Theme Toggle ----------
+  document.getElementById('toggleTheme').addEventListener('click', ()=>{
+    document.body.classList.toggle('light');
+    localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');
   });
+  if(localStorage.getItem('theme')==='light') document.body.classList.add('light');
+
+  // ---------- Auto Update ----------
+  setInterval(updateBossClocks,1000);
 }
-loadVisitors(); setInterval(loadVisitors,30000);
-
-// ---------- Theme Toggle ----------
-document.getElementById('toggleTheme').addEventListener('click', ()=>{
-  document.body.classList.toggle('light');
-  localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');
-});
-if(localStorage.getItem('theme')==='light') document.body.classList.add('light');
-
-// ---------- Auto Update ----------
-setInterval(updateBossClocks,1000);
 </script>
 </body>
 </html>
