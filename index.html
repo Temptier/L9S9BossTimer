@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Boss Timers — Manual & Scheduled</title>
+<title>Boss Timers â€” Manual & Scheduled</title>
 <style>
 :root{--bg:#0d1117;--fg:#e6edf3;--accent:#58a6ff;--card-bg:#161b22;--expired:#f85149;--warn:#f0c443}
 body.light{--bg:#f8f8f8;--fg:#111;--accent:#007777;--card-bg:#fff}
@@ -64,7 +64,7 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
       </div>
     </div>
     <div class="header-right">
-      <div id="userInfo" class="user-badge">IGN: — | Guild: —</div>
+      <div id="userInfo" class="user-badge">IGN: â€” | Guild: â€”</div>
       <button id="changeUser" class="ghost">Change</button>
     </div>
   </header>
@@ -124,7 +124,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// Discord webhook
+// Discord webhook(s)
 const DISCORD_WEBHOOK = "https://canary.discord.com/api/webhooks/1418540875323150507/E1ojUFf1gBvgKs2O-GPm7XxCz6P4LVmCiBMIm3C8iyTrV957xlHOFTolet2OrcPEWPNL";
 function sendDiscord(msg){
   fetch(DISCORD_WEBHOOK,{
@@ -160,11 +160,14 @@ modalSubmit.addEventListener('click', ()=>{
   userInfo = { user: ign, guild: guild };
   localStorage.setItem('userInfo', JSON.stringify(userInfo));
   hideUserModal();
+
+  // log visitor after user info set
+  logVisitor(userInfo.user, userInfo.guild);
 });
 changeUserBtn.addEventListener('click', ()=>{
   showUserModal();
-  modalIGN.value = userInfo.user;
-  modalGuild.value = userInfo.guild;
+  modalIGN.value = userInfo ? userInfo.user : '';
+  modalGuild.value = userInfo ? userInfo.guild : '';
 });
 
 // Preloaded Manual Timers
@@ -178,8 +181,9 @@ const manualDefs = preloadedManual.map(name=>({
 let startTimes = {};
 let fixedTimersCache = {};
 let bossMap = {};
-let globalSpawnNotified = {}; // tracks global spawn notifications
+let globalSpawnNotified = {}; // tracks global spawn notifications (and 5min flags)
 </script>
+
 <script>
 // ---------- Preloaded Scheduled Timers ----------
 const defaultFixedBosses = [
@@ -254,10 +258,13 @@ function attachManualHandlers(){
       db.ref('timerLogs/'+manualId).push(entry);
 
       // Discord notification
-      sendDiscord(`🟢 **${label}** restarted by **${userInfo.user} [${userInfo.guild}]**`);
+      sendDiscord(`ðŸŸ¢ **${label}** restarted by **${userInfo.user} [${userInfo.guild}]**`);
 
-      // reset global spawn notification for this boss
+      // reset notifications (spawn + 5-min warning)
       globalSpawnNotified[manualId] = false;
+      globalSpawnNotified[manualId + "_5min"] = false;
+      db.ref('timerNotifications/' + manualId).set(false);
+      db.ref('timerNotifications/' + manualId + '_5min').set(false);
     });
     btn.dataset.bound='1';
   });
@@ -287,85 +294,126 @@ db.ref('fixedTimers').on('value', snap=>{
   mergeTimers();
   renderBossTimers();
 });
+
+// Load persistent notification flags so clients don't re-send
+db.ref('timerNotifications').once('value', snap=>{
+  const data = snap.val() || {};
+  globalSpawnNotified = data;
+});
 </script>
+
 <script>
-// ---------- Update Boss Clocks ----------
+// ---------- Update Boss Clocks (merged with 5-min + spawn + scheduled resets) ----------
 function updateBossClocks(){
   ['manualBossGrid','scheduledBossGrid'].forEach(gridId=>{
     document.querySelectorAll(`#${gridId} .card`).forEach(card=>{
-      const label=card.dataset.label;
-      const b=bossMap[label];
-      const clockEl=card.querySelector('.clock');
-      const datetimeEl=card.querySelector('.datetime');
-      const lastByEl=card.querySelector('.lastBy');
-      const endTimeEl=card.querySelector('.endtime');
-      let remaining=null;
-      let isSpawn=false;
+      const label = card.dataset.label;
+      const b = bossMap[label];
+      const clockEl = card.querySelector('.clock');
+      const datetimeEl = card.querySelector('.datetime');
+      const lastByEl = card.querySelector('.lastBy');
+      const endTimeEl = card.querySelector('.endtime');
+      let remaining = null;
+      let isSpawn = false;
 
-      // Manual
-      if(b.manual){
-        const data=startTimes[b.manual.id];
-        if(data && data.startedAt) remaining=b.manual.hours*3600 - Math.floor((Date.now()-data.startedAt)/1000);
-        else remaining=b.manual.hours*3600;
+      // --- Manual Boss ---
+      if(b && b.manual){
+        const data = startTimes[b.manual.id];
+        if(data && data.startedAt){
+          remaining = b.manual.hours * 3600 - Math.floor((Date.now() - data.startedAt) / 1000);
+        } else {
+          remaining = b.manual.hours * 3600;
+        }
       }
 
-      // Scheduled
-      if(b.scheduled){
-        let next=null;
+      // --- Scheduled Boss ---
+      if(b && b.scheduled){
+        let next = null;
         b.scheduled.schedule.split(',').forEach(s=>{
-          const [day,time]=s.trim().split(' ');
-          const occ=getNextOccurrence(day,time);
-          if(!next || occ<next) next=occ;
+          const [day,time] = s.trim().split(' ');
+          const occ = getNextOccurrence(day,time);
+          if(!next || occ < next) next = occ;
         });
         if(next){
-          const schedRemaining=Math.floor((next-Date.now())/1000);
-          if(remaining===null || schedRemaining<remaining) remaining=schedRemaining;
-          const d=new Date(next);
-          const dayStr=d.toLocaleDateString(undefined,{weekday:'short'});
-          const timeStr=d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
-          datetimeEl.textContent=`Next spawn: ${dayStr} ${timeStr}`;
+          const schedRemaining = Math.floor((next - Date.now()) / 1000);
+          if(remaining === null || schedRemaining < remaining) remaining = schedRemaining;
+
+          const d = new Date(next);
+          const dayStr = d.toLocaleDateString(undefined,{weekday:'short'});
+          const timeStr = d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+          datetimeEl.textContent = `Next spawn: ${dayStr} ${timeStr}`;
+
+          // ðŸ”„ reset flags for new cycle (scheduled bosses)
+          const globalId = label;
+          // If flags are currently true (meaning last cycle already notified) and we are now before the next spawn,
+          // ensure flags are cleared so next cycle can notify again.
+          if(globalSpawnNotified[globalId] && schedRemaining > 0){
+            globalSpawnNotified[globalId] = false;
+            globalSpawnNotified[globalId + "_5min"] = false;
+            db.ref('timerNotifications/' + globalId).set(false);
+            db.ref('timerNotifications/' + globalId + '_5min').set(false);
+          }
         }
       }
 
-      if(remaining!==null){
-        if(remaining<=0){ remaining=0; card.classList.add('expired'); card.classList.remove('warning'); isSpawn=true; }
-        else card.classList.remove('expired','warning');
-
-        const h=Math.floor(remaining/3600), m=Math.floor((remaining%3600)/60), s=remaining%60;
-        clockEl.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-
-        // Manual end time + lastBy
-        if(b.manual && startTimes[b.manual.id]){
-          const endDate=new Date(startTimes[b.manual.id].startedAt + b.manual.hours*3600*1000);
-          if(endTimeEl) endTimeEl.textContent=`Ends: ${endDate.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${endDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
-          lastByEl.textContent=`Last restart: ${startTimes[b.manual.id].user} [${startTimes[b.manual.id].guild}]`;
+      // --- Remaining Time Display & Notifications ---
+      if(remaining !== null){
+        if(remaining <= 0){
+          remaining = 0;
+          card.classList.add('expired');
+          card.classList.remove('warning');
+          isSpawn = true;
+        } else {
+          card.classList.remove('expired','warning');
         }
 
-        // ---------- Global Spawn Notification ----------
-        const globalId = b.manual ? b.manual.id : label;
-        if(isSpawn && !globalSpawnNotified[globalId]){
-          sendDiscord(`💥 **${label}** Spawned!`);
-          globalSpawnNotified[globalId] = true;
+        const h = Math.floor(remaining/3600);
+        const m = Math.floor((remaining%3600)/60);
+        const s = remaining % 60;
+        clockEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 
-          // Save globally in Firebase to persist across sessions
+        // manual end time + lastBy
+        if(b && b.manual && startTimes[b.manual.id]){
+          const endDate = new Date(startTimes[b.manual.id].startedAt + b.manual.hours*3600*1000);
+          if(endTimeEl) endTimeEl.textContent = `Ends: ${endDate.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${endDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+          lastByEl.textContent = `Last restart: ${startTimes[b.manual.id].user} [${startTimes[b.manual.id].guild}]`;
+        }
+
+        // === Global Notifications ===
+        const globalId = b && b.manual ? b.manual.id : label;
+
+        // â° 5-min warning (once per cycle)
+        if(remaining <= 300 && remaining > 0 && !globalSpawnNotified[globalId + "_5min"]){
+          sendDiscord(`â° **${label}** will spawn in 5 minutes!`);
+          globalSpawnNotified[globalId + "_5min"] = true;
+          db.ref('timerNotifications/' + globalId + '_5min').set(true);
+        }
+
+        // ðŸ’¥ Spawn (once per cycle)
+        if(isSpawn && !globalSpawnNotified[globalId]){
+          sendDiscord(`ðŸ’¥ **${label}** Spawned!`);
+          globalSpawnNotified[globalId] = true;
           db.ref('timerNotifications/' + globalId).set(true);
         }
+
       } else {
-        clockEl.textContent='--:--:--';
-        if(endTimeEl) endTimeEl.textContent='';
-        lastByEl.textContent='';
+        clockEl.textContent = '--:--:--';
+        if(endTimeEl) endTimeEl.textContent = '';
+        lastByEl.textContent = '';
         card.classList.remove('expired','warning');
       }
     });
   });
 }
 
-// ---------- Load Global Notification State ----------
+// ---------- Load persistent notification state (if not already done) ----------
 db.ref('timerNotifications').once('value', snap=>{
   const data = snap.val() || {};
-  globalSpawnNotified = data;
+  // merge existing flags but don't overwrite local object entirely (safety)
+  Object.keys(data).forEach(k => { globalSpawnNotified[k] = data[k]; });
 });
 </script>
+
 <script>
 // ---------- Add Manual Timer ----------
 document.getElementById('addManual').addEventListener('click', ()=>{
@@ -399,7 +447,7 @@ document.getElementById('addScheduled').addEventListener('click', ()=>{
   globalSpawnNotified[key] = false; // reset global notification
 });
 
-// ---------- Restart/Stop All ----------
+// ---------- Restart/Stop All (confirm modal integrated) ----------
 const confirmModal=document.getElementById('confirmModal');
 const confirmYes=document.getElementById('confirmYes');
 const confirmNo=document.getElementById('confirmNo');
@@ -409,13 +457,23 @@ if(dontShow) dontShow.checked=skipConfirm;
 
 document.getElementById('restartAll').addEventListener('click', ()=>{
   const manualCards=document.querySelectorAll('#manualBossGrid .restartBtn');
-  if(skipConfirm){ manualCards.forEach(btn=>btn.click()); } 
+  if(skipConfirm){
+    manualCards.forEach(btn=>btn.click());
+    // send a single "All restarted" notification
+    if(userInfo && userInfo.user && userInfo.guild){
+      sendDiscord(`ðŸŸ¢ **All manual bosses** restarted by **${userInfo.user} [${userInfo.guild}]**`);
+    }
+  } 
   else confirmModal.style.display='flex';
 });
 
 if(confirmYes) confirmYes.addEventListener('click', ()=>{
   document.querySelectorAll('#manualBossGrid .restartBtn').forEach(btn=>btn.click());
   if(dontShow && dontShow.checked){ localStorage.setItem('skipRestartConfirmation','true'); skipConfirm=true; }
+  // send aggregated "All restarted" notification
+  if(userInfo && userInfo.user && userInfo.guild){
+    sendDiscord(`ðŸŸ¢ **All manual bosses** restarted by **${userInfo.user} [${userInfo.guild}]**`);
+  }
   confirmModal.style.display='none';
 });
 if(confirmNo) confirmNo.addEventListener('click', ()=>confirmModal.style.display='none');
@@ -423,11 +481,13 @@ if(confirmNo) confirmNo.addEventListener('click', ()=>confirmModal.style.display
 document.getElementById('stopAll').addEventListener('click', ()=>{
   manualDefs.forEach(m=>db.ref('timers/'+m.id).set(null));
 });
+</script>
 
+<script>
 // ---------- Visitor Panel with Cooldown ----------
 const visitorLogDiv=document.getElementById('visitorLog');
 const VISITOR_COOLDOWN = 5*60*1000; // 5 min per user
-const VISITOR_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe"; // <-- replace
+const VISITOR_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe"; // <-- replace if needed
 function sendVisitorDiscord(msg){
   fetch(VISITOR_WEBHOOK,{
     method:"POST",
@@ -437,6 +497,7 @@ function sendVisitorDiscord(msg){
 }
 
 function logVisitor(user, guild){
+  if(!user || !guild) return;
   const userKey = `${user}|${guild}`;
   const now = Date.now();
   const cooldownRef = db.ref('visitorCooldowns/' + userKey);
@@ -449,7 +510,7 @@ function logVisitor(user, guild){
     visitRef.set({ user, guild, accessedAt: now });
 
     if(canSend){
-      sendVisitorDiscord(`👀 New visitor: **${user} [${guild}]** visited the site!`);
+      sendVisitorDiscord(`ðŸ‘€ New visitor: **${user} [${guild}]** visited the site!`);
       cooldownRef.set(now);
     }
   });
@@ -469,31 +530,33 @@ function loadVisitors(){
       const snapshot = await cooldownRef.get();
       const lastTime = snapshot.val() || 0;
       const now = Date.now();
-      const isNew = (now - lastTime) < VISITOR_COOLDOWN;
+      const isNew = (now - v.accessedAt) < VISITOR_COOLDOWN;
 
       const minutes = Math.floor((now - v.accessedAt)/60000);
       const d=document.createElement('div');
-      d.textContent=`${v.user} [${v.guild}] - ${minutes} min ago ${isNew ? '🆕' : ''}`;
+      d.textContent=`${v.user} [${v.guild}] - ${minutes} min ago ${isNew ? 'ðŸ†•' : ''}`;
       visitorLogDiv.appendChild(d);
     });
   });
 }
 
-// ---------- Initialize Visitor Logging ----------
+// ---------- Initialize Visitor Logging when user info exists ----------
 if(userInfo && userInfo.user && userInfo.guild){
   logVisitor(userInfo.user, userInfo.guild);
 }
 loadVisitors();
 setInterval(loadVisitors,30000);
+</script>
 
-// ---------- Theme Toggle ----------
+<script>
+// ---------- Theme Toggle & Auto Update ----------
 document.getElementById('toggleTheme').addEventListener('click', ()=>{
   document.body.classList.toggle('light');
   localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');
 });
 if(localStorage.getItem('theme')==='light') document.body.classList.add('light');
 
-// ---------- Auto Update ----------
+// Auto update UI every second
 setInterval(updateBossClocks,1000);
 </script>
 </body>
