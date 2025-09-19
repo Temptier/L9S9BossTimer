@@ -107,10 +107,11 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
     </div>
   </div>
 </div>
+
+<!-- Firebase & Discord -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
-// ---------- Firebase Init ----------
 const firebaseConfig = {
   apiKey: "AIzaSyAD5I3c-SZ2LRuYG_6kaMgEkjvOtP1d3pU",
   authDomain: "synchronizedtimer-57ef0.firebaseapp.com",
@@ -123,7 +124,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ---------- Discord Webhook ----------
+// Discord webhook
 const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe";
 function sendDiscord(msg){
   fetch(DISCORD_WEBHOOK,{
@@ -133,7 +134,7 @@ function sendDiscord(msg){
   }).catch(e=>console.error("Discord error:",e));
 }
 
-// ---------- User Info ----------
+// User Info
 let userInfo = JSON.parse(localStorage.getItem("userInfo")) || null;
 const mainContent = document.getElementById('mainContent');
 const userModal = document.getElementById('userModal');
@@ -149,7 +150,6 @@ function hideUserModal(){
   mainContent.style.display='block'; 
   userInfoDisplay.textContent = `IGN: ${userInfo.user} | Guild: ${userInfo.guild}`;
 }
-
 if(!userInfo || !userInfo.user || !userInfo.guild){ showUserModal(); } 
 else { hideUserModal(); }
 
@@ -161,14 +161,13 @@ modalSubmit.addEventListener('click', ()=>{
   localStorage.setItem('userInfo', JSON.stringify(userInfo));
   hideUserModal();
 });
-
 changeUserBtn.addEventListener('click', ()=>{
   showUserModal();
   modalIGN.value = userInfo.user;
   modalGuild.value = userInfo.guild;
 });
 
-// ---------- Preloaded Manual Timers ----------
+// Preloaded Manual Timers
 const preloadedManual = ["Venatus","Viorent","Ego","Levera","Araneo","Undomiel","Lady Dalia","General Aquleus","Amentis","Baron Braudmore","Wannitas","Metus","Duplican","Shuliar","Gareth","Titore","Larba","Catena"];
 function normalize(s){ return s.replace(/\s+/g,'_').toLowerCase(); }
 const manualDefs = preloadedManual.map(name=>({
@@ -176,7 +175,12 @@ const manualDefs = preloadedManual.map(name=>({
   hours: { 'venatus':10,'viorent':10,'ego':21,'levera':24,'araneo':24,'undomiel':24,'lady_dalia':18,'general_aquleus':29,'amentis':29,'baron_braudmore':32,'wannitas':48,'metus':48,'duplican':35,'shuliar':35,'gareth':32,'titore':37,'larba':35,'catena':35 }[normalize(name)] || 24,
   id: 'manual_'+normalize(name)
 }));
-
+let startTimes = {};
+let fixedTimersCache = {};
+let bossMap = {};
+let globalSpawnNotified = {}; // tracks global spawn notifications
+</script>
+<script>
 // ---------- Preloaded Scheduled Timers ----------
 const defaultFixedBosses = [
   { label: "Climantis", schedule: "mon 11:30,thu 19:00" },
@@ -190,25 +194,6 @@ const defaultFixedBosses = [
 ];
 defaultFixedBosses.forEach(b=> db.ref('fixedTimers/default_'+normalize(b.label)).set(b));
 
-// ---------- State ----------
-let startTimes = {};
-let fixedTimersCache = {};
-let bossMap = {};
-
-// ---------- Helper Functions ----------
-function parseSchedules(scheduleStr){ return scheduleStr.split(',').map(s=>s.trim()).filter(Boolean); }
-function getNextOccurrence(dayStr,timeStr){
-  const daysMap={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
-  const [h,m]=timeStr.split(':').map(Number);
-  const target=daysMap[dayStr.toLowerCase()];
-  const now=new Date();
-  let next=new Date();
-  next.setHours(h,m,0,0);
-  while(next.getDay()!==target || next<=now){ next.setDate(next.getDate()+1); next.setHours(h,m,0,0); }
-  return next;
-}
-</script>
-<script>
 // ---------- Merge Timers ----------
 function mergeTimers(){
   bossMap={};
@@ -228,7 +213,7 @@ function createBossCard(b){
   card.className='card';
   card.dataset.label=b.label;
   const manualHours=b.manual ? b.manual.hours : null;
-  const schedules=b.scheduled ? parseSchedules(b.scheduled.schedule) : [];
+  const schedules=b.scheduled ? b.scheduled.schedule.split(',').map(s=>s.trim()) : [];
   const schedHtml=schedules.length ? `<div class="small">Schedule: ${schedules.join(', ')}</div>` : '';
   card.innerHTML=`
     <div class="label">${b.label}</div>
@@ -270,13 +255,41 @@ function attachManualHandlers(){
 
       // Discord notification
       sendDiscord(`🟢 **${label}** restarted by **${userInfo.user} [${userInfo.guild}]**`);
+
+      // reset global spawn notification for this boss
+      globalSpawnNotified[manualId] = false;
     });
     btn.dataset.bound='1';
   });
 }
 
-// ---------- Update Clocks + Notifications ----------
-let notified = {};
+// ---------- Scheduled Timers Helper ----------
+function getNextOccurrence(dayStr,timeStr){
+  const daysMap={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
+  const [h,m]=timeStr.split(':').map(Number);
+  const target=daysMap[dayStr.toLowerCase()];
+  const now=new Date();
+  let next=new Date();
+  next.setHours(h,m,0,0);
+  while(next.getDay()!==target || next<=now){ next.setDate(next.getDate()+1); next.setHours(h,m,0,0); }
+  return next;
+}
+
+// ---------- Firebase Listeners ----------
+db.ref('timers').on('value', snap=>{ 
+  startTimes = snap.val() || {}; 
+  updateBossClocks(); 
+});
+
+db.ref('fixedTimers').on('value', snap=>{
+  fixedTimersCache={};
+  snap.forEach(c=>{ fixedTimersCache[c.key]=c.val(); });
+  mergeTimers();
+  renderBossTimers();
+});
+</script>
+<script>
+// ---------- Update Boss Clocks ----------
 function updateBossClocks(){
   ['manualBossGrid','scheduledBossGrid'].forEach(gridId=>{
     document.querySelectorAll(`#${gridId} .card`).forEach(card=>{
@@ -287,6 +300,7 @@ function updateBossClocks(){
       const lastByEl=card.querySelector('.lastBy');
       const endTimeEl=card.querySelector('.endtime');
       let remaining=null;
+      let isSpawn=false;
 
       // Manual
       if(b.manual){
@@ -298,8 +312,8 @@ function updateBossClocks(){
       // Scheduled
       if(b.scheduled){
         let next=null;
-        parseSchedules(b.scheduled.schedule).forEach(s=>{
-          const [day,time]=s.split(' ');
+        b.scheduled.schedule.split(',').forEach(s=>{
+          const [day,time]=s.trim().split(' ');
           const occ=getNextOccurrence(day,time);
           if(!next || occ<next) next=occ;
         });
@@ -314,8 +328,7 @@ function updateBossClocks(){
       }
 
       if(remaining!==null){
-        if(remaining<=0){ remaining=0; card.classList.add('expired'); card.classList.remove('warning'); }
-        else if(remaining<=300){ card.classList.add('warning'); card.classList.remove('expired'); }
+        if(remaining<=0){ remaining=0; card.classList.add('expired'); card.classList.remove('warning'); isSpawn=true; }
         else card.classList.remove('expired','warning');
 
         const h=Math.floor(remaining/3600), m=Math.floor((remaining%3600)/60), s=remaining%60;
@@ -326,13 +339,16 @@ function updateBossClocks(){
           const endDate=new Date(startTimes[b.manual.id].startedAt + b.manual.hours*3600*1000);
           if(endTimeEl) endTimeEl.textContent=`Ends: ${endDate.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${endDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
           lastByEl.textContent=`Last restart: ${startTimes[b.manual.id].user} [${startTimes[b.manual.id].guild}]`;
+        }
 
-          // Discord alert 5 min before expiry
-          if(remaining <= 300 && !notified[b.manual.id]){
-            sendDiscord(`⚠️ **${b.label}** will expire in ~5 minutes!`);
-            notified[b.manual.id] = true;
-          }
-          if(remaining>300) notified[b.manual.id]=false;
+        // ---------- Global Spawn Notification ----------
+        const globalId = b.manual ? b.manual.id : label;
+        if(isSpawn && !globalSpawnNotified[globalId]){
+          sendDiscord(`💥 **${label}** Spawned!`);
+          globalSpawnNotified[globalId] = true;
+
+          // Save globally in Firebase to persist across sessions
+          db.ref('timerNotifications/' + globalId).set(true);
         }
       } else {
         clockEl.textContent='--:--:--';
@@ -343,21 +359,14 @@ function updateBossClocks(){
     });
   });
 }
+
+// ---------- Load Global Notification State ----------
+db.ref('timerNotifications').once('value', snap=>{
+  const data = snap.val() || {};
+  globalSpawnNotified = data;
+});
 </script>
 <script>
-// ---------- Firebase Listeners ----------
-db.ref('timers').on('value', snap=>{ 
-  startTimes = snap.val() || {}; 
-  updateBossClocks(); 
-});
-
-db.ref('fixedTimers').on('value', snap=>{
-  fixedTimersCache={};
-  snap.forEach(c=>{ fixedTimersCache[c.key]=c.val(); });
-  mergeTimers();
-  renderBossTimers();
-});
-
 // ---------- Add Manual Timer ----------
 document.getElementById('addManual').addEventListener('click', ()=>{
   const name = document.getElementById('manualName').value.trim();
@@ -371,6 +380,7 @@ document.getElementById('addManual').addEventListener('click', ()=>{
   renderBossTimers();
   document.getElementById('manualName').value='';
   document.getElementById('manualHours').value='';
+  globalSpawnNotified[id] = false; // reset global notification
 });
 
 // ---------- Add Scheduled Boss ----------
@@ -386,6 +396,7 @@ document.getElementById('addScheduled').addEventListener('click', ()=>{
   renderBossTimers();
   document.getElementById('schedName').value='';
   document.getElementById('schedTime').value='';
+  globalSpawnNotified[key] = false; // reset global notification
 });
 
 // ---------- Restart/Stop All ----------
@@ -413,27 +424,66 @@ document.getElementById('stopAll').addEventListener('click', ()=>{
   manualDefs.forEach(m=>db.ref('timers/'+m.id).set(null));
 });
 
-// ---------- Visitor Panel ----------
+// ---------- Visitor Panel with Cooldown ----------
 const visitorLogDiv=document.getElementById('visitorLog');
-let seen={};
+const VISITOR_COOLDOWN = 5*60*1000; // 5 min per user
+const VISITOR_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe"; // <-- replace
+function sendVisitorDiscord(msg){
+  fetch(VISITOR_WEBHOOK,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ content: msg })
+  }).catch(e=>console.error("Visitor Discord error:", e));
+}
+
+function logVisitor(user, guild){
+  const userKey = `${user}|${guild}`;
+  const now = Date.now();
+  const cooldownRef = db.ref('visitorCooldowns/' + userKey);
+  const visitRef = db.ref('siteVisits').push();
+
+  cooldownRef.get().then(snapshot=>{
+    const lastTime = snapshot.val() || 0;
+    const canSend = (now - lastTime) >= VISITOR_COOLDOWN;
+
+    visitRef.set({ user, guild, accessedAt: now });
+
+    if(canSend){
+      sendVisitorDiscord(`👀 New visitor: **${user} [${guild}]** visited the site!`);
+      cooldownRef.set(now);
+    }
+  });
+}
+
 function loadVisitors(){
-  const cutoff=Date.now()-10*60*1000;
+  const cutoff = Date.now() - 10*60*1000;
   db.ref('siteVisits').orderByChild('accessedAt').startAt(cutoff).once('value', snap=>{
     const visits=[];
     snap.forEach(c=>visits.push(c.val()));
     visits.sort((a,b)=>b.accessedAt-a.accessedAt);
     visitorLogDiv.innerHTML = visits.length ? '' : 'No recent visitors.';
-    visits.forEach(v=>{
-      const key=`${v.user}|${v.guild}|${v.accessedAt}`;
-      const isNew=!seen[key]; seen[key]=true;
-      const minutes=Math.floor((Date.now()-v.accessedAt)/60000);
+
+    visits.forEach(async v=>{
+      const userKey = `${v.user}|${v.guild}`;
+      const cooldownRef = db.ref('visitorCooldowns/' + userKey);
+      const snapshot = await cooldownRef.get();
+      const lastTime = snapshot.val() || 0;
+      const now = Date.now();
+      const isNew = (now - lastTime) < VISITOR_COOLDOWN;
+
+      const minutes = Math.floor((now - v.accessedAt)/60000);
       const d=document.createElement('div');
-      d.textContent=`${v.user} [${v.guild}] - ${minutes} min ago ${isNew?'🆕':''}`;
+      d.textContent=`${v.user} [${v.guild}] - ${minutes} min ago ${isNew ? '🆕' : ''}`;
       visitorLogDiv.appendChild(d);
     });
   });
 }
-loadVisitors(); 
+
+// ---------- Initialize Visitor Logging ----------
+if(userInfo && userInfo.user && userInfo.guild){
+  logVisitor(userInfo.user, userInfo.guild);
+}
+loadVisitors();
 setInterval(loadVisitors,30000);
 
 // ---------- Theme Toggle ----------
