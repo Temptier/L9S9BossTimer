@@ -123,6 +123,16 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// ---------- Discord Webhook ----------
+const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe";
+function sendDiscord(msg){
+  fetch(DISCORD_WEBHOOK,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ content: msg })
+  }).catch(e=>console.error("Discord error:",e));
+}
+
 // ---------- User Info ----------
 let userInfo = JSON.parse(localStorage.getItem("userInfo")) || null;
 const mainContent = document.getElementById('mainContent');
@@ -133,25 +143,16 @@ const modalSubmit = document.getElementById('modalSubmit');
 const userInfoDisplay = document.getElementById('userInfo');
 const changeUserBtn = document.getElementById('changeUser');
 
-function showUserModal(){
-  userModal.style.display='flex';
-  mainContent.style.display='none';
-}
-
-function hideUserModal(){
-  userModal.style.display='none';
-  mainContent.style.display='block';
+function showUserModal(){ userModal.style.display='flex'; mainContent.style.display='none'; }
+function hideUserModal(){ 
+  userModal.style.display='none'; 
+  mainContent.style.display='block'; 
   userInfoDisplay.textContent = `IGN: ${userInfo.user} | Guild: ${userInfo.guild}`;
 }
 
-// Load modal if no saved info
-if(!userInfo || !userInfo.user || !userInfo.guild){
-  showUserModal();
-} else {
-  hideUserModal();
-}
+if(!userInfo || !userInfo.user || !userInfo.guild){ showUserModal(); } 
+else { hideUserModal(); }
 
-// Submit button
 modalSubmit.addEventListener('click', ()=>{
   const ign = modalIGN.value.trim();
   const guild = modalGuild.value.trim();
@@ -161,7 +162,6 @@ modalSubmit.addEventListener('click', ()=>{
   hideUserModal();
 });
 
-// Change User
 changeUserBtn.addEventListener('click', ()=>{
   showUserModal();
   modalIGN.value = userInfo.user;
@@ -207,7 +207,8 @@ function getNextOccurrence(dayStr,timeStr){
   while(next.getDay()!==target || next<=now){ next.setDate(next.getDate()+1); next.setHours(h,m,0,0); }
   return next;
 }
-
+</script>
+<script>
 // ---------- Merge Timers ----------
 function mergeTimers(){
   bossMap={};
@@ -239,7 +240,7 @@ function createBossCard(b){
   `;
   return card;
 }
-// ---------- Render Timers ----------
+
 function renderManualTimers(){
   const grid = document.getElementById('manualBossGrid');
   grid.innerHTML='';
@@ -266,12 +267,16 @@ function attachManualHandlers(){
       const entry={ startedAt: Date.now(), user: userInfo.user, guild: userInfo.guild };
       db.ref('timers/'+manualId).set(entry);
       db.ref('timerLogs/'+manualId).push(entry);
+
+      // Discord notification
+      sendDiscord(`🟢 **${label}** restarted by **${userInfo.user} [${userInfo.guild}]**`);
     });
     btn.dataset.bound='1';
   });
 }
 
-// ---------- Update Clocks ----------
+// ---------- Update Clocks + Notifications ----------
+let notified = {};
 function updateBossClocks(){
   ['manualBossGrid','scheduledBossGrid'].forEach(gridId=>{
     document.querySelectorAll(`#${gridId} .card`).forEach(card=>{
@@ -316,10 +321,18 @@ function updateBossClocks(){
         const h=Math.floor(remaining/3600), m=Math.floor((remaining%3600)/60), s=remaining%60;
         clockEl.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 
+        // Manual end time + lastBy
         if(b.manual && startTimes[b.manual.id]){
           const endDate=new Date(startTimes[b.manual.id].startedAt + b.manual.hours*3600*1000);
           if(endTimeEl) endTimeEl.textContent=`Ends: ${endDate.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${endDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
           lastByEl.textContent=`Last restart: ${startTimes[b.manual.id].user} [${startTimes[b.manual.id].guild}]`;
+
+          // Discord alert 5 min before expiry
+          if(remaining <= 300 && !notified[b.manual.id]){
+            sendDiscord(`⚠️ **${b.label}** will expire in ~5 minutes!`);
+            notified[b.manual.id] = true;
+          }
+          if(remaining>300) notified[b.manual.id]=false;
         }
       } else {
         clockEl.textContent='--:--:--';
@@ -330,9 +343,14 @@ function updateBossClocks(){
     });
   });
 }
-
+</script>
+<script>
 // ---------- Firebase Listeners ----------
-db.ref('timers').on('value', snap=>{ startTimes=snap.val()||{}; updateBossClocks(); });
+db.ref('timers').on('value', snap=>{ 
+  startTimes = snap.val() || {}; 
+  updateBossClocks(); 
+});
+
 db.ref('fixedTimers').on('value', snap=>{
   fixedTimersCache={};
   snap.forEach(c=>{ fixedTimersCache[c.key]=c.val(); });
@@ -391,7 +409,9 @@ if(confirmYes) confirmYes.addEventListener('click', ()=>{
 });
 if(confirmNo) confirmNo.addEventListener('click', ()=>confirmModal.style.display='none');
 
-document.getElementById('stopAll').addEventListener('click', ()=>{ manualDefs.forEach(m=>db.ref('timers/'+m.id).set(null)); });
+document.getElementById('stopAll').addEventListener('click', ()=>{
+  manualDefs.forEach(m=>db.ref('timers/'+m.id).set(null));
+});
 
 // ---------- Visitor Panel ----------
 const visitorLogDiv=document.getElementById('visitorLog');
@@ -413,7 +433,8 @@ function loadVisitors(){
     });
   });
 }
-loadVisitors(); setInterval(loadVisitors,30000);
+loadVisitors(); 
+setInterval(loadVisitors,30000);
 
 // ---------- Theme Toggle ----------
 document.getElementById('toggleTheme').addEventListener('click', ()=>{
