@@ -43,7 +43,6 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
 </style>
 </head>
 <body>
-
 <!-- User Info Modal -->
 <div id="userModal">
   <div id="userModalContent">
@@ -129,8 +128,8 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 // ---------- Discord Webhooks ----------
-const DISCORD_BOSS_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe";
-const DISCORD_VISITOR_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe";
+const DISCORD_BOSS_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe"; // replace with your webhook
+const DISCORD_VISITOR_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe"; // replace with your webhook
 
 function sendBossDiscord(msg){
   fetch(DISCORD_BOSS_WEBHOOK,{
@@ -184,8 +183,7 @@ changeUserBtn.addEventListener('click', ()=>{
   modalIGN.value = userInfo ? userInfo.user : '';
   modalGuild.value = userInfo ? userInfo.guild : '';
 });
-</script>
-<script>
+
 // ---------- Preloaded Manual Timers ----------
 const preloadedManual = ["Venatus","Viorent","Ego","Levera","Araneo","Undomiel","Lady Dalia","General Aquleus","Amentis","Baron Braudmore","Wannitas","Metus","Duplican","Shuliar","Gareth","Titore","Larba","Catena"];
 function normalize(s){ return s.replace(/\s+/g,'_').toLowerCase(); }
@@ -268,8 +266,7 @@ function renderBossTimers(){
   renderManualTimers();
   renderScheduledTimers();
 }
-</script>
-<script>
+
 // ---------- Scheduled Timer Helpers ----------
 function getNextOccurrence(dayStr,timeStr){
   const daysMap={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
@@ -284,7 +281,8 @@ function getNextOccurrence(dayStr,timeStr){
   }
   return next;
 }
-
+</script>
+<script>
 // ---------- Firebase Listeners ----------
 db.ref('timers').on('value', snap=>{
   startTimes = snap.val() || {};
@@ -363,9 +361,7 @@ function updateBossClocks(){
           const schedRemaining = Math.floor((next - now)/1000);
           if(remaining===null || schedRemaining<remaining) remaining=schedRemaining;
           const d = new Date(next);
-          const dayStr = d.toLocaleDateString(undefined,{weekday:'short'});
-          const timeStr = d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
-          datetimeEl.textContent = `Next spawn: ${dayStr} ${timeStr}`;
+          datetimeEl.textContent = `Next spawn: ${d.toLocaleDateString(undefined,{weekday:'short'})} ${d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
         }
       }
 
@@ -513,7 +509,6 @@ document.getElementById('sendTimers').addEventListener('click', ()=>{
     let timeText = "--:--";
     if(b.manual && startTimes[b.manual.id]){
       const end = new Date(startTimes[b.manual.id].startedAt + b.manual.hours*3600*1000);
-      // Format: Day Short, Day-Month Short, HH:MM
       timeText = `${end.toLocaleDateString(undefined, {weekday:'short',day:'2-digit',month:'short'})} ${end.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
     } else if(b.scheduled){
       let next = null;
