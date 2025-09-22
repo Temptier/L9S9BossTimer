@@ -131,7 +131,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 // ---------- Discord Webhooks ----------
-let DISCORD_BOSS_WEBHOOK = let DISCORD_BOSS_WEBHOOK = localStorage.getItem('termuxWebhook') || ""; // Termux notifications
+let DISCORD_BOSS_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe"; // Termux notifications
 const DISCORD_VISITOR_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe"; // Site notifications
 
 function sendBossDiscord(msg){
