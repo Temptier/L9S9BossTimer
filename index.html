@@ -83,20 +83,21 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
     </div>
     <div id="manualBossGrid" class="timer-grid"></div>
   </section>
-<section>
-  <h2>Scheduled Bosses</h2>
-  <div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap">
-    <input id="schedName" type="text" placeholder="Boss Name">
-    <input id="schedTime" type="text" placeholder="Schedule e.g. mon 12:30,tue 15:00">
-    <button id="addScheduled">Add Scheduled Boss</button>
-  </div>
-  <div id="scheduledBossGrid" class="timer-grid"></div>
-</section>
 
-<section>
-  <h2>Recent Visitors (last 10 min)</h2>
-  <div id="visitorLog">Loading...</div>
-</section>
+  <section>
+    <h2>Scheduled Bosses</h2>
+    <div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap">
+      <input id="schedName" type="text" placeholder="Boss Name">
+      <input id="schedTime" type="text" placeholder="Schedule e.g. mon 12:30,tue 15:00">
+      <button id="addScheduled">Add Scheduled Boss</button>
+    </div>
+    <div id="scheduledBossGrid" class="timer-grid"></div>
+  </section>
+
+  <section>
+    <h2>Recent Visitors (last 10 min)</h2>
+    <div id="visitorLog">Loading...</div>
+  </section>
 </main>
 
 <!-- Confirm Restart All Modal -->
@@ -110,7 +111,6 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
     </div>
   </div>
 </div>
-
 <!-- Firebase & Discord -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -164,6 +164,7 @@ function hideUserModal(){
   mainContent.style.display='block';
   if(userInfo && userInfo.user && userInfo.guild){
     userInfoDisplay.textContent = `IGN: ${userInfo.user} | Guild: ${userInfo.guild}`;
+    applyGuildRestrictions();
   }
 }
 
@@ -184,6 +185,23 @@ changeUserBtn.addEventListener('click', ()=>{
   modalIGN.value = userInfo ? userInfo.user : '';
   modalGuild.value = userInfo ? userInfo.guild : '';
 });
+
+// ---------- Guild-Based Button Visibility ----------
+function applyGuildRestrictions(){
+  const isVesperial = userInfo.guild.toLowerCase() === 'vesperial';
+  // Header buttons
+  document.getElementById('restartAll').style.display = isVesperial ? 'inline-block':'none';
+  document.getElementById('stopAll').style.display = isVesperial ? 'inline-block':'none';
+  document.getElementById('sendTimers').style.display = isVesperial ? 'inline-block':'none';
+
+  // Manual & Scheduled buttons
+  document.querySelectorAll('.card').forEach(card=>{
+    const stopBtn = card.querySelector('.stopBtn');
+    const sendBtn = card.querySelector('.sendBtn');
+    if(stopBtn) stopBtn.style.display = isVesperial ? 'inline-block':'none';
+    if(sendBtn) sendBtn.style.display = isVesperial ? 'inline-block':'none';
+  });
+}
 // ---------- Preloaded Manual Timers ----------
 const preloadedManual = ["Venatus","Viorent","Ego","Levera","Araneo","Undomiel","Lady Dalia","General Aquleus","Amentis","Baron Braudmore","Wannitas","Metus","Duplican","Shuliar","Gareth","Titore","Larba","Catena"];
 function normalize(s){ return s.replace(/\s+/g,'_').toLowerCase(); }
@@ -232,7 +250,7 @@ function mergeTimers(){
   });
 }
 
-// ---------- Render Cards ----------
+// ---------- Create Cards ----------
 function createBossCard(b, isManual=true){
   const card=document.createElement('div');
   card.className='card';
@@ -250,7 +268,6 @@ function createBossCard(b, isManual=true){
       ${b.manual.isCustom ? '<button class="deleteBtn">Delete</button>' : ''}
     `;
   }
-
   buttonsHtml += `<button class="sendBtn" style="margin-top:8px;">Send Timer</button>`;
 
   card.innerHTML=`
@@ -261,6 +278,15 @@ function createBossCard(b, isManual=true){
     ${schedHtml}
     <div class="small lastBy"></div>
   `;
+
+  // Apply guild-based button visibility
+  if(userInfo && userInfo.guild.toLowerCase() !== 'vesperial'){
+    const stopBtn = card.querySelector('.stopBtn');
+    const sendBtn = card.querySelector('.sendBtn');
+    if(stopBtn) stopBtn.style.display='none';
+    if(sendBtn) sendBtn.style.display='none';
+  }
+
   return card;
 }
 
@@ -282,7 +308,6 @@ function renderBossTimers(){
   renderManualTimers();
   renderScheduledTimers();
 }
-
 // ---------- Manual Timer Handlers ----------
 function attachManualHandlers(){
   document.querySelectorAll('#manualBossGrid .card').forEach(card=>{
@@ -365,6 +390,7 @@ function attachScheduledHandlers(){
     }
   });
 }
+
 // ---------- Helper: Scheduled Boss ----------
 function getNextOccurrence(dayStr, timeStr){
   const days = ['sun','mon','tue','wed','thu','fri','sat'];
@@ -441,7 +467,6 @@ function updateBossClocks(){
     });
   });
 }
-
 // ---------- Visitor Logging ----------
 const visitorLogDiv = document.getElementById('visitorLog');
 const VISITOR_COOLDOWN = 5*60*1000;
@@ -480,7 +505,9 @@ function loadVisitors(){
   });
 }
 
-if(userInfo && userInfo.user && userInfo.guild){ logVisitor(userInfo.user,userInfo.guild); }
+if(userInfo && userInfo.user && userInfo.guild){
+  logVisitor(userInfo.user,userInfo.guild);
+}
 loadVisitors();
 setInterval(loadVisitors,30000);
 
@@ -500,6 +527,12 @@ db.ref('fixedTimers').on('value', snap=>{
 
 // ---------- Send All Timers ----------
 const sendTimersBtn = document.getElementById('sendTimers');
+
+if(userInfo && userInfo.guild.toLowerCase() !== 'vesperial'){
+  sendTimersBtn.style.display='none';
+  document.getElementById('restartAll').style.display='none';
+  document.getElementById('stopAll').style.display='none';
+}
 
 sendTimersBtn.addEventListener('click', () => {
   let messages = [];
@@ -535,9 +568,6 @@ sendTimersBtn.addEventListener('click', () => {
   if(messages.length){
     const fullMsg = `@everyone\n` + messages.join('\n\n');
     sendBossDiscord(fullMsg);
-    
-  } else {
-    
   }
 });
 
