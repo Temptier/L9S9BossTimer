@@ -325,7 +325,7 @@ function attachManualHandlers(){
         const entry = { startedAt: Date.now(), user: userInfo.user, guild: userInfo.guild };
         db.ref('timers/'+manual.id).set(entry);
         db.ref('timerLogs/'+manual.id).push(entry);
-        sendBossDiscord(`🟢 **${label}** restarted by **${userInfo.user} [${userInfo.guild}]**`);
+        sendVisitorDiscord(`🟢 **${label}** restarted by **${userInfo.user} [${userInfo.guild}]**`);
       });
       restartBtn.dataset.bound='1';
     }
