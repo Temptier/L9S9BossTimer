@@ -45,6 +45,10 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
   box-shadow: 0 0 12px 2px rgba(46,204,113,0.9);
   border-color: #2ecc71;
 }
+.timer-today {
+  box-shadow: 0 0 12px 2px rgba(46,204,113,0.9);
+  border-color: #2ecc71;
+}
 @media(max-width:600px){
   header{flex-direction:column;align-items:stretch}
   .header-left, .header-right {justify-content: space-between;margin-bottom: 8px}
@@ -478,14 +482,44 @@ function updateBossClocks() {
       }
 
       // ---------- Update Clock Display ----------
+// ---------- Update Clock Display ----------
+let isSameDay = false;
+if (b && b.manual && startTimes[b.manual.id]) {
+  const endDate = new Date(startTimes[b.manual.id].startedAt + b.manual.hours*3600*1000);
+  isSameDay = new Date().toDateString() === endDate.toDateString();
+}
+if (b && b.scheduled) {
+  let next = null;
+  b.scheduled.schedule.split(',').forEach(s => {
+    const [day,time] = s.trim().split(' ');
+    const occ = getNextOccurrence(day,time);
+    if (!next || occ < next) next = occ;
+  });
+
+  if (next) {
+    const schedRemaining = Math.floor((next - now)/1000);
+
+    if (remaining === null || schedRemaining < remaining) remaining = schedRemaining;
+
+    const nextDate = new Date(next);
+    isSameDay = new Date().toDateString() === nextDate.toDateString();
+    datetimeEl.textContent = `Next spawn: ${nextDate.toLocaleDateString(undefined,{weekday:'short'})} ${nextDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+  }
+}
+
       if(remaining!==null){
         if(remaining<=0){
           remaining=0;
-  card.classList.add('expired','timer-ended');
-  card.classList.remove('warning','timer-running');
+  card.classList.add('expired');          // red expired
+  card.classList.remove('warning','timer-running','timer-today');
+} else if (isSameDay) {
+  // Ends today → green glow
+  card.classList.add('timer-today');
+  card.classList.remove('expired','warning','timer-running');
 } else {
+  // Active but not today → blue glow
   card.classList.add('timer-running');
-  card.classList.remove('expired','warning','timer-ended');
+  card.classList.remove('expired','warning','timer-today');
 }
 
         const h=Math.floor(remaining/3600);
