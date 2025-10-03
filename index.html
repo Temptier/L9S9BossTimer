@@ -443,7 +443,7 @@ function updateBossClocks() {
 
           // 10-minute notification exact second
           if(remaining === 600 && !notified10Min[b.manual.id]) {
-            sendBossDiscord(`⏰ **${b.label}** will spawn in 10 minutes!`);
+            sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
             notified10Min[b.manual.id] = true;
           } else if(remaining > 600) {
             notified10Min[b.manual.id] = false; // reset if timer restarted
@@ -469,7 +469,7 @@ function updateBossClocks() {
           // 10-minute notification exact second
           const schedKey = 'sched_' + b.label;
           if(schedRemaining === 600 && !notified10Min[schedKey]) {
-            sendBossDiscord(`⏰ **${b.label}** will spawn in 10 minutes!`);
+            sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
             notified10Min[schedKey] = true;
           } else if(schedRemaining > 600) {
             notified10Min[schedKey] = false;
