@@ -346,7 +346,7 @@ function attachManualHandlers(){
     if(stopBtn && !stopBtn.dataset.bound){
       stopBtn.addEventListener('click', ()=>{
         db.ref('timers/'+manual.id).set(null);
-        sendBossDiscord(`⏹️ **${label}** timer stopped by **${userInfo.user} [${userInfo.guild}]**`);
+        sendVisitorDiscord(`⏹️ **${label}** timer stopped by **${userInfo.user} [${userInfo.guild}]**`);
       });
       stopBtn.dataset.bound='1';
     }
@@ -357,7 +357,7 @@ function attachManualHandlers(){
           delete bossMap[label].manual;
           db.ref('timers/'+manual.id).set(null);
           renderManualTimers();
-          sendBossDiscord(`🗑️ **${label}** manual timer deleted by **${userInfo.user} [${userInfo.guild}]**`);
+          sendVisitorDiscord(`🗑️ **${label}** manual timer deleted by **${userInfo.user} [${userInfo.guild}]**`);
         }
       });
       deleteBtn.dataset.bound='1';
