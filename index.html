@@ -201,7 +201,7 @@ changeUserBtn.addEventListener('click', ()=>{
 
 // ---------- Guild-Based Button Visibility ----------
 function applyGuildRestrictions(){
-  const isVesperial = userInfo.guild.toLowerCase() === 'vesperial';
+  const isVesperial = userInfo && userInfo.guild && userInfo.guild.toLowerCase() === 'vesperial';
   // Header buttons
   document.getElementById('restartAll').style.display = isVesperial ? 'inline-block':'none';
   document.getElementById('stopAll').style.display = isVesperial ? 'inline-block':'none';
@@ -214,6 +214,10 @@ function applyGuildRestrictions(){
     if(stopBtn) stopBtn.style.display = isVesperial ? 'inline-block':'none';
     if(sendBtn) sendBtn.style.display = isVesperial ? 'inline-block':'none';
   });
+
+  // sendPanel visibility (if present)
+  const sp = document.getElementById('sendPanel');
+  if(sp) sp.style.display = isVesperial ? 'block' : 'none';
 }
 // ---------- Preloaded Manual Timers ----------
 const preloadedManual = ["Venatus","Viorent","Ego","Levera","Araneo","Undomiel","Lady Dalia","General Aquleus","Amentis","Baron Braudmore","Wannitas","Metus","Duplican","Shuliar","Gareth","Titore","Larba","Catena"];
@@ -226,9 +230,13 @@ const manualDefs = preloadedManual.map(name=>({
   isCustom: false
 }));
 
-let startTimes = {};
+let startTimes = {};        // timers/<id> current startedAt
 let fixedTimersCache = {};
 let bossMap = {};
+let missesCache = {};       // misses/<id>
+let lastStarts = {};        // last recorded start from logs or from startTimes
+
+const MISS_PENALTY_MS = 3 * 60 * 1000; // 3 minutes penalty per miss
 
 // ---------- Preloaded Scheduled Timers ----------
 const defaultFixedBosses = [
@@ -287,13 +295,14 @@ function createBossCard(b, isManual=true){
     <div class="label">${b.label}</div>
     <div class="clock">--:--:--</div>
     <div class="datetime"></div>
+    <div class="small missCount"></div>
     ${buttonsHtml}
     ${schedHtml}
     <div class="small lastBy"></div>
   `;
 
   // Apply guild-based button visibility
-  if(userInfo && userInfo.guild.toLowerCase() !== 'vesperial'){
+  if(userInfo && userInfo.guild && userInfo.guild.toLowerCase() !== 'vesperial'){
     const stopBtn = card.querySelector('.stopBtn');
     const sendBtn = card.querySelector('.sendBtn');
     if(stopBtn) stopBtn.style.display='none';
@@ -320,6 +329,8 @@ function renderScheduledTimers(){
 function renderBossTimers(){
   renderManualTimers();
   renderScheduledTimers();
+  refreshSendPanel();
+  applyGuildRestrictions();
 }
 // ---------- Manual Timer Handlers ----------
 function attachManualHandlers(){
@@ -338,6 +349,8 @@ function attachManualHandlers(){
         const entry = { startedAt: Date.now(), user: userInfo.user, guild: userInfo.guild };
         db.ref('timers/'+manual.id).set(entry);
         db.ref('timerLogs/'+manual.id).push(entry);
+        // reset misses when restarted
+        db.ref('misses/'+manual.id).set(null);
         sendVisitorDiscord(`🟢 **${label}** restarted by **${userInfo.user} [${userInfo.guild}]**`);
       });
       restartBtn.dataset.bound='1';
@@ -356,6 +369,7 @@ function attachManualHandlers(){
         if(confirm(`Delete manual timer for ${label}?`)){
           delete bossMap[label].manual;
           db.ref('timers/'+manual.id).set(null);
+          db.ref('misses/'+manual.id).set(null);
           renderManualTimers();
           sendVisitorDiscord(`🗑️ **${label}** manual timer deleted by **${userInfo.user} [${userInfo.guild}]**`);
         }
@@ -364,12 +378,8 @@ function attachManualHandlers(){
     }
 
     if(sendBtn && !sendBtn.dataset.bound){
-      sendBtn.addEventListener('click', ()=>{
-        let endTimeText = '--:--';
-        if(startTimes[manual.id]){
-          const end = new Date(startTimes[manual.id].startedAt + manual.hours*3600*1000);
-          endTimeText = `${end.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${end.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
-        }
+      sendBtn.addEventListener('click', async ()=>{
+        const endTimeText = await computeManualSendTime(manual);
         const msg = `@everyone\n🟢 **${label}**\nTime: ${endTimeText}\nBy: ${userInfo.user} [${userInfo.guild}]`;
         sendBossDiscord(msg);
       });
@@ -419,7 +429,33 @@ function getNextOccurrence(dayStr, timeStr){
   return dt.getTime();
 }
 
-// ---------- Update Boss Clocks + 10-Min Notification ----------
+// ---------- Miss Handling Helpers ----------
+function formatDateForMsg(ms){
+  const d = new Date(ms);
+  return `${d.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+}
+
+// Compute final send time string for manual timer:
+// - if running: end time from startedAt + hours
+// - else if misses exist: nextMissTime (end of miss)
+// - else: '--:--'
+async function computeManualSendTime(manual){
+  const running = startTimes[manual.id];
+  if(running && running.startedAt){
+    const end = new Date(running.startedAt + manual.hours*3600*1000);
+    return `${end.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${end.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+  }
+
+  // check missesCache or fetch
+  const miss = missesCache[manual.id] || null;
+  if(miss && miss.nextMissTime){
+    return formatDateForMsg(miss.nextMissTime) + ` (Misses: ${miss.missCount || 0})`;
+  }
+
+  return '--:--';
+}
+
+// ---------- Update Boss Clocks + 10-Min Notification + Miss UI ----------
 const notified10Min = {}; // track which bosses have been notified
 
 function updateBossClocks() {
@@ -433,6 +469,7 @@ function updateBossClocks() {
       const datetimeEl = card.querySelector('.datetime');
       const lastByEl = card.querySelector('.lastBy');
       const endTimeEl = card.querySelector('.endtime');
+      const missCountEl = card.querySelector('.missCount');
       let remaining = null;
 
       // ---------- Manual Timers ----------
@@ -441,16 +478,37 @@ function updateBossClocks() {
         if(data && data.startedAt) {
           remaining = b.manual.hours*3600 - Math.floor((now - data.startedAt)/1000);
 
-          // 10-minute notification exact second
-          if(remaining === 600 && !notified10Min[b.manual.id]) {
+          // 10-minute notification exact second (or tolerance)
+          if(remaining <= 600 && remaining > 595 && !notified10Min[b.manual.id]) {
             sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
             notified10Min[b.manual.id] = true;
           } else if(remaining > 600) {
             notified10Min[b.manual.id] = false; // reset if timer restarted
           }
+
+          // Reset miss display
+          if(missCountEl) missCountEl.textContent = '';
         } else {
-          remaining = b.manual.hours*3600;
-          notified10Min[b.manual.id] = false;
+          // Not running → check misses
+          const miss = missesCache[b.manual.id] || null;
+          if(miss && miss.nextMissTime){
+            remaining = Math.floor((miss.nextMissTime - now)/1000);
+
+            // 10-minute notification for miss timers
+            const missKey = 'miss_' + b.manual.id;
+            if(remaining <= 600 && remaining > 595 && !notified10Min[missKey]){
+              sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
+              notified10Min[missKey] = true;
+            } else if(remaining > 600){
+              notified10Min[missKey] = false;
+            }
+
+            if(missCountEl) missCountEl.textContent = `Misses: ${miss.missCount || 0}`;
+            if(datetimeEl && miss.nextMissTime) datetimeEl.textContent = `Next spawn: ${new Date(miss.nextMissTime).toLocaleDateString(undefined,{weekday:'short'})} ${new Date(miss.nextMissTime).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+          } else {
+            remaining = b.manual.hours*3600;
+            if(missCountEl) missCountEl.textContent = '';
+          }
         }
       }
 
@@ -482,7 +540,6 @@ function updateBossClocks() {
       }
 
       // ---------- Update Clock Display ----------
-// ---------- Update Clock Display ----------
 let isSameDay = false;
 if (b && b.manual && startTimes[b.manual.id]) {
   const endDate = new Date(startTimes[b.manual.id].startedAt + b.manual.hours*3600*1000);
@@ -510,17 +567,17 @@ if (b && b.scheduled) {
       if(remaining!==null){
         if(remaining<=0){
           remaining=0;
-  card.classList.add('expired');          // red expired
-  card.classList.remove('warning','timer-running','timer-today');
-} else if (isSameDay) {
-  // Ends today → green glow
-  card.classList.add('timer-today');
-  card.classList.remove('expired','warning','timer-running');
-} else {
-  // Active but not today → blue glow
-  card.classList.add('timer-running');
-  card.classList.remove('expired','warning','timer-today');
-}
+          card.classList.add('expired');          // red expired
+          card.classList.remove('warning','timer-running','timer-today');
+        } else if (isSameDay) {
+          // Ends today → green glow
+          card.classList.add('timer-today');
+          card.classList.remove('expired','warning','timer-running');
+        } else {
+          // Active but not today → blue glow
+          card.classList.add('timer-running');
+          card.classList.remove('expired','warning','timer-today');
+        }
 
         const h=Math.floor(remaining/3600);
         const m=Math.floor((remaining%3600)/60);
@@ -536,7 +593,7 @@ if (b && b.scheduled) {
         clockEl.textContent='--:--:--';
         if(endTimeEl) endTimeEl.textContent='';
         lastByEl.textContent='';
-        card.classList.remove('expired','warning');
+        if(card) card.classList.remove('expired','warning','timer-today','timer-running');
       }
     });
   });
@@ -547,7 +604,7 @@ const VISITOR_COOLDOWN = 5*60*1000;
 
 function logVisitor(user,guild){
   if(!user || !guild) return;
-  const userKey = `${user}|${guild}`;
+  const userKey = encodeURIComponent(`${user}|${guild}`);
   const now = Date.now();
   const cooldownRef = db.ref('visitorCooldowns/'+userKey);
   const visitRef = db.ref('siteVisits').push();
@@ -555,27 +612,43 @@ function logVisitor(user,guild){
   cooldownRef.get().then(snapshot=>{
     const lastTime = snapshot.val() || 0;
     const canSend = (now - lastTime) >= VISITOR_COOLDOWN;
-    visitRef.set({user,guild,accessedAt:now});
+    visitRef.set({user,guild,accessedAt:now}).catch(e=>console.error('visit set error', e));
     if(canSend){
       sendVisitorDiscord(`👀 New visitor: **${user} [${guild}]** visited the site!`);
-      cooldownRef.set(now);
+      cooldownRef.set(now).catch(e=>console.error('cooldown set error', e));
     }
+  }).catch(err=>{
+    console.error('cooldown get error', err);
+    visitRef.set({user,guild,accessedAt:now}).catch(e=>console.error('visit set fallback error', e));
   });
 }
 
 function loadVisitors(){
   const cutoff = Date.now() - 10*60*1000;
-  db.ref('siteVisits').orderByChild('accessedAt').startAt(cutoff).once('value',snap=>{
-    const visits = [];
-    snap.forEach(c=>visits.push(c.val()));
-    visits.sort((a,b)=>b.accessedAt - a.accessedAt);
-    visitorLogDiv.innerHTML = visits.length ? '' : 'No recent visitors.';
-    visits.forEach(v=>{
-      const minutes = Math.floor((Date.now() - v.accessedAt)/60000);
-      const d = document.createElement('div');
-      d.textContent = `${v.user} [${v.guild}] - ${minutes} min ago`;
-      visitorLogDiv.appendChild(d);
-    });
+  const q = db.ref('siteVisits').orderByChild('accessedAt').startAt(cutoff).limitToLast(200);
+  if(window._siteVisitsListenerRef) {
+    window._siteVisitsListenerRef.off();
+  }
+  window._siteVisitsListenerRef = q;
+  q.on('value', snap=>{
+    try{
+      const visits = [];
+      snap.forEach(c=>visits.push(c.val()));
+      visits.sort((a,b)=> (b.accessedAt||0) - (a.accessedAt||0));
+      visitorLogDiv.innerHTML = visits.length ? '' : 'No recent visitors.';
+      visits.forEach(v=>{
+        const minutes = Math.max(0, Math.floor((Date.now() - (v.accessedAt||0))/60000));
+        const d = document.createElement('div');
+        d.textContent = `${v.user} [${v.guild}] - ${minutes} min ago`;
+        visitorLogDiv.appendChild(d);
+      });
+    } catch(e){
+      console.error('render visitors error', e);
+      visitorLogDiv.textContent = 'Error loading visitors';
+    }
+  }, err=>{
+    console.error('loadVisitors Firebase error', err);
+    visitorLogDiv.textContent = 'Unable to load visitors';
   });
 }
 
@@ -587,9 +660,28 @@ setInterval(loadVisitors,30000);
 
 // ---------- Firebase Listeners ----------
 manualDefs.forEach(m=>{
+  // timers current
   db.ref('timers/'+m.id).on('value', snap => {
-    startTimes[m.id] = snap.val();
+    const val = snap.val();
+    startTimes[m.id] = val;
+    if(val && val.startedAt){
+      lastStarts[m.id] = val.startedAt;
+    }
     renderBossTimers();
+  });
+
+  // misses listener
+  db.ref('misses/'+m.id).on('value', snap => {
+    missesCache[m.id] = snap.val();
+    renderBossTimers();
+  });
+
+  // fetch last log entry once to have fallback previous start
+  db.ref('timerLogs/'+m.id).orderByChild('startedAt').limitToLast(1).once('value').then(snap=>{
+    snap.forEach(c=>{
+      const v = c.val();
+      if(v && v.startedAt) lastStarts[m.id] = v.startedAt;
+    });
   });
 });
 
@@ -599,30 +691,100 @@ db.ref('fixedTimers').on('value', snap=>{
   renderBossTimers();
 });
 
+// ---------- Miss Processing Logic ----------
+// Called periodically to create/advance misses for manual timers that are not restarted.
+function processMisses(){
+  const now = Date.now();
+
+  manualDefs.forEach(manual => {
+    const running = startTimes[manual.id];
+    const missRef = db.ref('misses/'+manual.id);
+
+    if(running && running.startedAt){
+      // If timer running, clear any misses
+      missRef.get().then(snap=>{
+        if(snap.exists()) missRef.set(null);
+      }).catch(()=>{});
+      return;
+    }
+
+    // Not running. Determine previous missed spawn time
+    const missData = missesCache[manual.id] || null;
+    const lastStart = lastStarts[manual.id] || null;
+    const timerMs = manual.hours * 3600 * 1000;
+
+    // If there is an existing miss entry, ensure nextMissTime is in future by advancing using a transaction
+    if(missData && missData.lastMissTime){
+      // Run transaction to advance missCount until nextMissTime > now
+      missRef.transaction(current=>{
+        if(!current) return current; // nothing to do
+        let missCount = current.missCount || 0;
+        let lastMissTime = current.lastMissTime || current.lastMissTime; // ms
+        let next = current.nextMissTime || (lastMissTime + timerMs + (missCount * MISS_PENALTY_MS));
+        // Advance while next <= now
+        let changed = false;
+        while(next <= Date.now()){
+          missCount = (missCount || 0) + 1;
+          lastMissTime = next;
+          next = lastMissTime + timerMs + (missCount * MISS_PENALTY_MS);
+          changed = true;
+        }
+        if(changed){
+          return { missCount, lastMissTime, nextMissTime: next };
+        }
+        return undefined; // no change
+      }).catch(()=>{});
+      return;
+    }
+
+    // If there's no missData, but lastStart exists and the scheduled end has already passed, create first miss
+    if(!missData && lastStart){
+      const prevSpawn = lastStart + timerMs;
+      if(prevSpawn <= now){
+        // create initial missCount = 1
+        const missCount = 1;
+        const lastMissTime = prevSpawn;
+        const nextMissTime = lastMissTime + timerMs + (missCount * MISS_PENALTY_MS);
+        missRef.set({ missCount, lastMissTime, nextMissTime }).catch(()=>{});
+      }
+    }
+  });
+}
+
+// Run processMisses every 10 seconds
+setInterval(processMisses, 10000);
+processMisses(); // run once at startup
+
 // ---------- Send All Timers ----------
 const sendTimersBtn = document.getElementById('sendTimers');
 
-if(userInfo && userInfo.guild.toLowerCase() !== 'vesperial'){
+if(userInfo && userInfo.guild && userInfo.guild.toLowerCase() !== 'vesperial'){
   sendTimersBtn.style.display='none';
   document.getElementById('restartAll').style.display='none';
   document.getElementById('stopAll').style.display='none';
 }
 
-sendTimersBtn.addEventListener('click', () => {
+sendTimersBtn.addEventListener('click', async () => {
   let messages = [];
 
   // Manual Timers
-  Object.values(bossMap).forEach(b => {
+  for(const b of Object.values(bossMap)){
     if(b.manual){
-      const data = startTimes[b.manual.id];
+      const manual = b.manual;
+      const data = startTimes[manual.id];
       let endTimeText = '--:--';
       if(data && data.startedAt){
-        const end = new Date(data.startedAt + b.manual.hours*3600*1000);
+        const end = new Date(data.startedAt + manual.hours*3600*1000);
         endTimeText = `${end.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${end.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+      } else {
+        const miss = missesCache[manual.id] || null;
+        if(miss && miss.nextMissTime){
+          endTimeText = `${formatDateForMsg(miss.nextMissTime)} (Misses: ${miss.missCount || 0})`;
+        }
       }
       messages.push(`🟢 **${b.label}**\nTime: ${endTimeText}`);
     }
-  });
+  }
 
   // Scheduled Timers
   Object.values(bossMap).forEach(b => {
@@ -665,12 +827,13 @@ function applyGuildRestrictions() {
   });
 
   // ✅ Also hide bottom panel
-  document.getElementById('sendPanel').style.display = isVesperial ? 'block' : 'none';
+  const sp = document.getElementById('sendPanel');
+  if(sp) sp.style.display = isVesperial ? 'block' : 'none';
 }
 </script>
 
 <!-- Collapsible Send Panel -->
-<div id="sendPanel" style="position:none;bottom:0;left:0;right:0;background:var(--card-bg);border-top:1px solid rgba(255,255,255,0.1);padding:10px;box-shadow:0 -4px 12px rgba(0,0,0,0.4);z-index:9999;">
+<div id="sendPanel" style="position:fixed;bottom:0;left:0;right:0;background:var(--card-bg);border-top:1px solid rgba(255,255,255,0.1);padding:10px;box-shadow:0 -4px 12px rgba(0,0,0,0.4);z-index:9999;">
   <div id="sendPanelHeader" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
     <strong>📤 Send Selected Timers</strong>
     <span id="toggleSendPanel" style="font-weight:700;cursor:pointer;">▲</span>
@@ -706,15 +869,15 @@ function refreshSendPanel(){
 }
 
 // --- Send Selected ---
-document.getElementById('sendSelected').addEventListener('click', ()=>{
+document.getElementById('sendSelected').addEventListener('click', async ()=>{
   const selected = Array.from(document.querySelectorAll('#sendPanelTimers input:checked')).map(i=>i.value);
   const customMsg = document.getElementById('customMessage').value.trim();
   if(!selected.length){ alert("Select at least one timer."); return; }
 
   let messages=[];
-  selected.forEach(label=>{
+  for(const label of selected){
     const b = bossMap[label];
-    if(!b) return;
+    if(!b) continue;
 
     if(b.manual){
       const data = startTimes[b.manual.id];
@@ -722,6 +885,11 @@ document.getElementById('sendSelected').addEventListener('click', ()=>{
       if(data && data.startedAt){
         const end = new Date(data.startedAt + b.manual.hours*3600*1000);
         endTimeText = `${end.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${end.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+      } else {
+        const miss = missesCache[b.manual.id] || null;
+        if(miss && miss.nextMissTime){
+          endTimeText = `${new Date(miss.nextMissTime).toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${new Date(miss.nextMissTime).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})} (Misses: ${miss.missCount || 0})`;
+        }
       }
       messages.push(`🟢 **${label}**\nTime: ${endTimeText}`);
     }
@@ -737,7 +905,7 @@ document.getElementById('sendSelected').addEventListener('click', ()=>{
       const endTimeText = endDate ? `${endDate.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${endDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}` : '--:--';
       messages.push(`🟢 **${label}**\nNext spawn: ${endTimeText}`);
     }
-  });
+  }
 
   if(messages.length){
     let fullMsg = `@everyone\n`+messages.join('\n\n');
