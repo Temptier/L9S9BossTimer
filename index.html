@@ -78,6 +78,7 @@ input[type="text"],input[type="number"]{padding:8px;border-radius:8px;border:1px
         <button id="restartAll">Restart All</button>
         <button id="stopAll" class="ghost">Stop All</button>
         <button id="sendTimers">Send Timers</button>
+        <button id="switchWebhook" class="ghost">Webhook: —</button>
         <button id="toggleTheme" class="ghost">Toggle Theme</button>
       </div>
     </div>
@@ -141,12 +142,35 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ---------- Discord Webhooks ----------
-const DISCORD_BOSS_WEBHOOK = "https://discord.com/api/webhooks/1418540875323150507/E1ojUFf1gBvgKs2O-GPm7XxCz6P4LVmCiBMIm3C8iyTrV957xlHOFTolet2OrcPEWPNL";
+// ---------- Discord Webhooks (two boss webhooks + visitor webhook) ----------
+const DISCORD_BOSS_WEBHOOK_1 = "https://discord.com/api/webhooks/1418540875323150507/E1ojUFf1gBvgKs2O-GPm7XxCz6P4LVmCiBMIm3C8iyTrV957xlHOFTolet2OrcPEWPNL";
+const DISCORD_BOSS_WEBHOOK_2 = "https://discord.com/api/webhooks/1428465308372570163/FikWcAGyGBBAtn1QkDA50IvqhsrEZWhyMq305T8gGX2micIM0D0vDD_Q0db5MhWATuoH";
 const DISCORD_VISITOR_WEBHOOK = "https://discord.com/api/webhooks/1418184593047289956/d0xJb2P_tDCDzmQXuBDj09s6S5qN5we22Ub6-1qJvnPrt99taW97zSZtYfGg9iccPWVe";
 
+// Active Boss Webhook (defaults to #1)
+let activeBossWebhook = DISCORD_BOSS_WEBHOOK_1;
+
+function setActiveBossWebhook(which, skipSave){
+  if (which === 1) activeBossWebhook = DISCORD_BOSS_WEBHOOK_1;
+  else if (which === 2) activeBossWebhook = DISCORD_BOSS_WEBHOOK_2;
+  else activeBossWebhook = DISCORD_BOSS_WEBHOOK_1;
+  if (!skipSave) localStorage.setItem('activeBossWebhook', String(which));
+  updateWebhookButtonLabel();
+}
+
+// Restore selection from localStorage (default to 1)
+const savedChoice = parseInt(localStorage.getItem('activeBossWebhook') || "1", 10);
+setActiveBossWebhook(savedChoice, true);
+
+function updateWebhookButtonLabel(){
+  const btn = document.getElementById('switchWebhook');
+  const which = parseInt(localStorage.getItem('activeBossWebhook') || "1", 10) || 1;
+  btn.textContent = `Webhook: ${which}`;
+  btn.title = `Active boss webhook: ${which}`;
+}
+
 function sendBossDiscord(msg){
-  fetch(DISCORD_BOSS_WEBHOOK,{
+  fetch(activeBossWebhook,{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
     body: JSON.stringify({ content: msg })
@@ -199,6 +223,13 @@ changeUserBtn.addEventListener('click', ()=>{
   modalGuild.value = userInfo ? userInfo.guild : '';
 });
 
+// Theme toggle
+const themeBtn = document.getElementById('toggleTheme');
+themeBtn.addEventListener('click', ()=>{
+  document.body.classList.toggle('light');
+  localStorage.setItem('themeLight', document.body.classList.contains('light') ? '1' : '0');
+});
+if(localStorage.getItem('themeLight') === '1') document.body.classList.add('light');
 // ---------- Guild-Based Button Visibility ----------
 function applyGuildRestrictions(){
   const isVesperial = userInfo && userInfo.guild && userInfo.guild.toLowerCase() === 'vesperial';
@@ -380,7 +411,7 @@ function attachManualHandlers(){
     if(sendBtn && !sendBtn.dataset.bound){
       sendBtn.addEventListener('click', async ()=>{
         const endTimeText = await computeManualSendTime(manual);
-        const msg = `@everyone\n🟢 **${label}**\nTime: ${endTimeText}\nBy: ${userInfo.user} [${userInfo.guild}]`;
+        const msg = `@everyone\n🟢 **${label}**\nTime: ${endTimeText}\nBy: ${userInfo.user} `;
         sendBossDiscord(msg);
       });
       sendBtn.dataset.bound='1';
@@ -406,7 +437,7 @@ function attachScheduledHandlers(){
         });
         const endDate = nextTime ? new Date(nextTime) : null;
         const endTimeText = endDate ? `${endDate.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${endDate.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}` : '--:--';
-        const msg = `@everyone\n🟢 **${label}**\nNext spawn: ${endTimeText}\nBy: ${userInfo.user} [${userInfo.guild}]`;
+        const msg = `@everyone\n🟢 **${label}**\nNext spawn: ${endTimeText}\nBy: ${userInfo.user} `;
         sendBossDiscord(msg);
       });
       sendBtn.dataset.bound='1';
@@ -436,9 +467,6 @@ function formatDateForMsg(ms){
 }
 
 // Compute final send time string for manual timer:
-// - if running: end time from startedAt + hours
-// - else if misses exist: nextMissTime (end of miss)
-// - else: '--:--'
 async function computeManualSendTime(manual){
   const running = startTimes[manual.id];
   if(running && running.startedAt){
@@ -446,7 +474,6 @@ async function computeManualSendTime(manual){
     return `${end.toLocaleDateString(undefined,{weekday:'short',day:'2-digit',month:'short'})} ${end.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
   }
 
-  // check missesCache or fetch
   const miss = missesCache[manual.id] || null;
   if(miss && miss.nextMissTime){
     return formatDateForMsg(miss.nextMissTime) + ` (Misses: ${miss.missCount || 0})`;
@@ -478,23 +505,19 @@ function updateBossClocks() {
         if(data && data.startedAt) {
           remaining = b.manual.hours*3600 - Math.floor((now - data.startedAt)/1000);
 
-          // 10-minute notification exact second (or tolerance)
           if(remaining <= 600 && remaining > 595 && !notified10Min[b.manual.id]) {
             sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
             notified10Min[b.manual.id] = true;
           } else if(remaining > 600) {
-            notified10Min[b.manual.id] = false; // reset if timer restarted
+            notified10Min[b.manual.id] = false;
           }
 
-          // Reset miss display
           if(missCountEl) missCountEl.textContent = '';
         } else {
-          // Not running → check misses
           const miss = missesCache[b.manual.id] || null;
           if(miss && miss.nextMissTime){
             remaining = Math.floor((miss.nextMissTime - now)/1000);
 
-            // 10-minute notification for miss timers
             const missKey = 'miss_' + b.manual.id;
             if(remaining <= 600 && remaining > 595 && !notified10Min[missKey]){
               sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
@@ -524,7 +547,6 @@ function updateBossClocks() {
         if(next) {
           const schedRemaining = Math.floor((next - now)/1000);
 
-          // 10-minute notification exact second
           const schedKey = 'sched_' + b.label;
           if(schedRemaining === 600 && !notified10Min[schedKey]) {
             sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
@@ -567,14 +589,12 @@ if (b && b.scheduled) {
       if(remaining!==null){
         if(remaining<=0){
           remaining=0;
-          card.classList.add('expired');          // red expired
+          card.classList.add('expired');
           card.classList.remove('warning','timer-running','timer-today');
         } else if (isSameDay) {
-          // Ends today → green glow
           card.classList.add('timer-today');
           card.classList.remove('expired','warning','timer-running');
         } else {
-          // Active but not today → blue glow
           card.classList.add('timer-running');
           card.classList.remove('expired','warning','timer-today');
         }
@@ -598,6 +618,7 @@ if (b && b.scheduled) {
     });
   });
 }
+
 // ---------- Visitor Logging ----------
 const visitorLogDiv = document.getElementById('visitorLog');
 const VISITOR_COOLDOWN = 5*60*1000;
@@ -692,7 +713,6 @@ db.ref('fixedTimers').on('value', snap=>{
 });
 
 // ---------- Miss Processing Logic ----------
-// Called periodically to create/advance misses for manual timers that are not restarted.
 function processMisses(){
   const now = Date.now();
 
@@ -701,27 +721,22 @@ function processMisses(){
     const missRef = db.ref('misses/'+manual.id);
 
     if(running && running.startedAt){
-      // If timer running, clear any misses
       missRef.get().then(snap=>{
         if(snap.exists()) missRef.set(null);
       }).catch(()=>{});
       return;
     }
 
-    // Not running. Determine previous missed spawn time
     const missData = missesCache[manual.id] || null;
     const lastStart = lastStarts[manual.id] || null;
     const timerMs = manual.hours * 3600 * 1000;
 
-    // If there is an existing miss entry, ensure nextMissTime is in future by advancing using a transaction
     if(missData && missData.lastMissTime){
-      // Run transaction to advance missCount until nextMissTime > now
       missRef.transaction(current=>{
-        if(!current) return current; // nothing to do
+        if(!current) return current;
         let missCount = current.missCount || 0;
-        let lastMissTime = current.lastMissTime || current.lastMissTime; // ms
+        let lastMissTime = current.lastMissTime || current.lastMissTime;
         let next = current.nextMissTime || (lastMissTime + timerMs + (missCount * MISS_PENALTY_MS));
-        // Advance while next <= now
         let changed = false;
         while(next <= Date.now()){
           missCount = (missCount || 0) + 1;
@@ -732,16 +747,14 @@ function processMisses(){
         if(changed){
           return { missCount, lastMissTime, nextMissTime: next };
         }
-        return undefined; // no change
+        return undefined;
       }).catch(()=>{});
       return;
     }
 
-    // If there's no missData, but lastStart exists and the scheduled end has already passed, create first miss
     if(!missData && lastStart){
       const prevSpawn = lastStart + timerMs;
       if(prevSpawn <= now){
-        // create initial missCount = 1
         const missCount = 1;
         const lastMissTime = prevSpawn;
         const nextMissTime = lastMissTime + timerMs + (missCount * MISS_PENALTY_MS);
@@ -751,9 +764,8 @@ function processMisses(){
   });
 }
 
-// Run processMisses every 10 seconds
 setInterval(processMisses, 10000);
-processMisses(); // run once at startup
+processMisses();
 
 // ---------- Send All Timers ----------
 const sendTimersBtn = document.getElementById('sendTimers');
@@ -767,7 +779,6 @@ if(userInfo && userInfo.guild && userInfo.guild.toLowerCase() !== 'vesperial'){
 sendTimersBtn.addEventListener('click', async () => {
   let messages = [];
 
-  // Manual Timers
   for(const b of Object.values(bossMap)){
     if(b.manual){
       const manual = b.manual;
@@ -786,7 +797,6 @@ sendTimersBtn.addEventListener('click', async () => {
     }
   }
 
-  // Scheduled Timers
   Object.values(bossMap).forEach(b => {
     if(b.scheduled){
       let nextTime = null;
@@ -809,27 +819,15 @@ sendTimersBtn.addEventListener('click', async () => {
 
 // ---------- Auto Update Clocks ----------
 setInterval(updateBossClocks,1000);
-</script>
-<script>
-function renderBossTimers(){
-  renderManualTimers();
-  renderScheduledTimers();
-  refreshSendPanel(); // ✅ keep panel updated
-}
 
-function applyGuildRestrictions() {
-  const guild = localStorage.getItem('guild') || '';
-  const isVesperial = guild.toLowerCase() === 'vesperial';
+// ---------- Switch Webhook Button ----------
+document.getElementById('switchWebhook').addEventListener('click', ()=>{
+  const current = parseInt(localStorage.getItem('activeBossWebhook') || "1", 10);
+  const next = current === 1 ? 2 : 1;
+  setActiveBossWebhook(next);
+});
 
-  // Hide send buttons if not vesperial
-  document.querySelectorAll('.sendBtn').forEach(btn => {
-    btn.style.display = isVesperial ? 'inline-block' : 'none';
-  });
-
-  // ✅ Also hide bottom panel
-  const sp = document.getElementById('sendPanel');
-  if(sp) sp.style.display = isVesperial ? 'block' : 'none';
-}
+// ---------- Send Panel (collapsible) ----------
 </script>
 
 <!-- Collapsible Send Panel -->
@@ -910,9 +908,14 @@ document.getElementById('sendSelected').addEventListener('click', async ()=>{
   if(messages.length){
     let fullMsg = `@everyone\n`+messages.join('\n\n');
     if(customMsg) fullMsg += `\n\n💬 ${customMsg}`;
+    // send using the currently active boss webhook
     sendBossDiscord(fullMsg);
   }
 });
+
+// Initialize UI labels / listeners
+updateWebhookButtonLabel();
+renderBossTimers();
 </script>
 </body>
 </html>
