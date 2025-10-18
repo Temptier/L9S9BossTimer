@@ -500,66 +500,73 @@ function updateBossClocks() {
       let remaining = null;
 
       // ---------- Manual Timers ----------
-      if(b && b.manual) {
+      if (b && b.manual) {
         const data = startTimes[b.manual.id];
-        if(data && data.startedAt) {
-          remaining = b.manual.hours*3600 - Math.floor((now - data.startedAt)/1000);
+        if (data && data.startedAt) {
+          remaining = b.manual.hours * 3600 - Math.floor((now - data.startedAt) / 1000);
 
-          if(remaining <= 600 && remaining > 595 && !notified10Min[b.manual.id]) {
+          // 10-min Notification: fires only once when remaining in [600,599]
+          if (remaining <= 600 && remaining >= 599 && !notified10Min[b.manual.id]) {
             sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
             notified10Min[b.manual.id] = true;
-          } else if(remaining > 600) {
+          } else if (remaining > 600) {
             notified10Min[b.manual.id] = false;
           }
 
-          if(missCountEl) missCountEl.textContent = '';
+          if (missCountEl) missCountEl.textContent = '';
         } else {
           const miss = missesCache[b.manual.id] || null;
-          if(miss && miss.nextMissTime){
-            remaining = Math.floor((miss.nextMissTime - now)/1000);
-
+          if (miss && miss.nextMissTime) {
+            remaining = Math.floor((miss.nextMissTime - now) / 1000);
             const missKey = 'miss_' + b.manual.id;
-            if(remaining <= 600 && remaining > 595 && !notified10Min[missKey]){
+
+            // 10-min Notification for missed spawns
+            if (remaining <= 600 && remaining >= 599 && !notified10Min[missKey]) {
               sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
               notified10Min[missKey] = true;
-            } else if(remaining > 600){
+            } else if (remaining > 600) {
               notified10Min[missKey] = false;
             }
 
-            if(missCountEl) missCountEl.textContent = `Misses: ${miss.missCount || 0}`;
-            if(datetimeEl && miss.nextMissTime) datetimeEl.textContent = `Next spawn: ${new Date(miss.nextMissTime).toLocaleDateString(undefined,{weekday:'short'})} ${new Date(miss.nextMissTime).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+            if (missCountEl) missCountEl.textContent = `Misses: ${miss.missCount || 0}`;
+            if (datetimeEl && miss.nextMissTime)
+              datetimeEl.textContent = `Next spawn: ${new Date(miss.nextMissTime).toLocaleDateString(undefined, { weekday: 'short' })} ${new Date(miss.nextMissTime).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
           } else {
-            remaining = b.manual.hours*3600;
-            if(missCountEl) missCountEl.textContent = '';
+            remaining = b.manual.hours * 3600;
+            if (missCountEl) missCountEl.textContent = '';
           }
         }
       }
 
       // ---------- Scheduled Timers ----------
-      if(b && b.scheduled) {
+      if (b && b.scheduled) {
         let next = null;
         b.scheduled.schedule.split(',').forEach(s => {
-          const [day,time] = s.trim().split(' ');
-          const occ = getNextOccurrence(day,time);
-          if(!next || occ < next) next = occ;
+          const [day, time] = s.trim().split(' ');
+          const occ = getNextOccurrence(day, time);
+          if (!next || occ < next) next = occ;
         });
 
-        if(next) {
-          const schedRemaining = Math.floor((next - now)/1000);
-
+        if (next) {
+          const schedRemaining = Math.floor((next - now) / 1000);
           const schedKey = 'sched_' + b.label;
-          if(schedRemaining === 600 && !notified10Min[schedKey]) {
+
+          // 10-min Notification for scheduled spawns
+          if (schedRemaining <= 600 && schedRemaining >= 599 && !notified10Min[schedKey]) {
             sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
             notified10Min[schedKey] = true;
-          } else if(schedRemaining > 600) {
+          } else if (schedRemaining > 600) {
             notified10Min[schedKey] = false;
           }
 
-          if(remaining===null || schedRemaining<remaining) remaining = schedRemaining;
+          if (remaining === null || schedRemaining < remaining) remaining = schedRemaining;
           const d = new Date(next);
-          datetimeEl.textContent = `Next spawn: ${d.toLocaleDateString(undefined,{weekday:'short'})} ${d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+          datetimeEl.textContent = `Next spawn: ${d.toLocaleDateString(undefined, { weekday: 'short' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
         }
       }
+    });
+  });
+}
 
       // ---------- Update Clock Display ----------
 let isSameDay = false;
