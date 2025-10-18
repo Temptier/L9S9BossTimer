@@ -505,7 +505,7 @@ function updateBossClocks() {
         if(data && data.startedAt) {
           remaining = b.manual.hours*3600 - Math.floor((now - data.startedAt)/1000);
 
-          if(remaining <= 600 && remaining > 595 && !notified10Min[b.manual.id]) {
+          if(remaining <= 600 && remaining > 599 && !notified10Min[b.manual.id]) {
             sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
             notified10Min[b.manual.id] = true;
           } else if(remaining > 600) {
@@ -519,7 +519,7 @@ function updateBossClocks() {
             remaining = Math.floor((miss.nextMissTime - now)/1000);
 
             const missKey = 'miss_' + b.manual.id;
-            if(remaining <= 600 && remaining > 595 && !notified10Min[missKey]){
+            if(remaining <= 600 && remaining > 599 && !notified10Min[missKey]){
               sendBossDiscord(`@everyone⏰ **${b.label}** will spawn in 10 minutes!`);
               notified10Min[missKey] = true;
             } else if(remaining > 600){
